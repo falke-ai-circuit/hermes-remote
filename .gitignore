@@ -1,0 +1,9 @@
+build/
+cmd/hermes-remote/hermes-remote
+cmd/server/server
+*.exe
+*.test
+*.out
+.venv/
+__pycache__/
+*.pyc

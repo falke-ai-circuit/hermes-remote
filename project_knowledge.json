@@ -1,0 +1,69 @@
+{
+  "project": "hermes-remote",
+  "version": "v0.1.0-a0",
+  "last_updated": "2026-06-13T15:00:00Z",
+  "hot_cache": [
+    {
+      "topic": "Module path is github.com/falke-ai-circuit/hermes-remote",
+      "weight": 0.95,
+      "last_hit": "2026-06-13T14:45:00Z",
+      "files": ["go.mod", "ALL *.go files"],
+      "note": "All Go files must import github.com/falke-ai-circuit/hermes-remote. The old falke-remote path was from the initial scaffold."
+    },
+    {
+      "topic": "Go 1.22.5 installed at /opt/data/go/bin/go",
+      "weight": 0.90,
+      "last_hit": "2026-06-13T14:30:00Z",
+      "files": [],
+      "note": "Not a system package — downloaded from go.dev. Use export PATH=/opt/data/go/bin:$PATH before building."
+    },
+    {
+      "topic": "gorilla/websocket v1.5.3 is the only external dependency",
+      "weight": 0.85,
+      "last_hit": "2026-06-13T14:46:00Z",
+      "files": ["go.mod", "go.sum"],
+      "note": "Zero other dependencies. The binary should stay minimal — add new deps only with justification."
+    }
+  ],
+  "architecture": {
+    "files": {
+      "internal/protocol/messages.go": "All JSON message types, Envelope, 25 command types, 9 error codes, helper functions",
+      "internal/protocol/websocket.go": "WebSocket dial, listen, TLS config, cert fingerprint",
+      "internal/protocol/server.go": "TLS server wrapper with WebSocket upgrade handler",
+      "internal/protocol/binary.go": "Binary frame encoding for large payloads (>1MB)",
+      "internal/server/server.go": "Multi-session WebSocket server, HTTP API endpoints",
+      "internal/server/registry.go": "Agent registry with JSON persistence",
+      "internal/server/proxy.go": "LLM proxy routing to providers",
+      "internal/server/session.go": "Per-agent session manager (memory, skills, context)",
+      "internal/agent/agent.go": "Agent loop, connection management, command dispatch",
+      "internal/platform/platform.go": "Platform interface (shell, fs, screen, input, system)",
+      "internal/platform/platform_linux.go": "Linux implementation (bash, xdotool, import/scrot, xclip)",
+      "cmd/hermes-remote/main.go": "CLI entry point (--connect, --listen, --mode, --token, --name)",
+      "cmd/server/main.go": "Server entry point",
+      "tool/plugin.py": "Hermes plugin registering 5 remote tools",
+      "tool/plugin.yaml": "Plugin manifest"
+    },
+    "commands": [
+      "shell", "shell_pty", "shell_stream",
+      "fs_list", "fs_stat", "fs_read", "fs_write", "fs_delete", "fs_move", "fs_mkdir",
+      "screenshot", "screenshot_region", "screen_info", "screen_stream_start", "screen_stream_stop",
+      "click", "type", "key", "hotkey",
+      "health", "process_list", "process_kill", "open_url", "notify",
+      "clipboard_get", "clipboard_set", "token_rotate"
+    ],
+    "tools": [
+      "remote_agent_list", "remote_shell", "remote_fs_read", "remote_fs_write", "remote_screenshot"
+    ]
+  },
+  "gotchas": [],
+  "recent_changes": [
+    {
+      "version": "v0.1.0-a0",
+      "date": "2026-06-13",
+      "summary": "Initial scaffold — protocol, server, agent, platform, CLI, plugin. Builds and vets cleanly.",
+      "files": [
+        "ALL files — initial commit"
+      ]
+    }
+  ]
+}
