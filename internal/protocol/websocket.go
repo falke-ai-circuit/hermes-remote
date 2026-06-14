@@ -30,23 +30,26 @@ func Dial(rawURL string, certPath string, token string) (*websocket.Conn, error)
 
 	dialer := &websocket.Dialer{
 		HandshakeTimeout: 10 * time.Second,
-		TLSClientConfig: &tls.Config{
-			MinVersion: tls.VersionTLS13,
-		},
 	}
 
-	if certPath != "" {
-		certPool := x509.NewCertPool()
-		certPEM, err := os.ReadFile(certPath)
-		if err != nil {
-			return nil, fmt.Errorf("read cert: %w", err)
+	// Only apply TLS config for wss:// URLs; ws:// uses plain HTTP
+	if u.Scheme == "wss" {
+		dialer.TLSClientConfig = &tls.Config{
+			MinVersion: tls.VersionTLS13,
 		}
-		if !certPool.AppendCertsFromPEM(certPEM) {
-			return nil, fmt.Errorf("failed to parse cert")
+		if certPath != "" {
+			certPool := x509.NewCertPool()
+			certPEM, err := os.ReadFile(certPath)
+			if err != nil {
+				return nil, fmt.Errorf("read cert: %w", err)
+			}
+			if !certPool.AppendCertsFromPEM(certPEM) {
+				return nil, fmt.Errorf("failed to parse cert")
+			}
+			dialer.TLSClientConfig.RootCAs = certPool
+		} else {
+			dialer.TLSClientConfig.InsecureSkipVerify = true
 		}
-		dialer.TLSClientConfig.RootCAs = certPool
-	} else {
-		dialer.TLSClientConfig.InsecureSkipVerify = true
 	}
 
 	header := http.Header{}

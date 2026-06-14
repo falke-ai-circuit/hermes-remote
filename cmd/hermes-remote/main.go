@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/falke-ai-circuit/hermes-remote/internal/agent"
@@ -33,11 +34,20 @@ func main() {
 		log.Fatalf("Invalid mode: %s (must be 'silent' or 'interactive')", *mode)
 	}
 
+	// Strip surrounding quotes from token (shell expansion can embed them)
+	tokenVal := strings.Trim(*token, "\"'")
+	if tokenVal != *token {
+		log.Printf("[agent] stripped quotes from token (was %d chars, now %d chars)", len(*token), len(tokenVal))
+	}
+	if tokenVal != "" {
+		log.Printf("[agent] token length=%d first_char=%c last_char=%c", len(tokenVal), tokenVal[0], tokenVal[len(tokenVal)-1])
+	}
+
 	cfg := agent.Config{
 		Mode:  "outbound",
 		URL:   *connectURL,
 		Addr:  *listenAddr,
-		Token: *token,
+		Token: tokenVal,
 		Name:  *name,
 	}
 

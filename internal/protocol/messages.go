@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 // Message types
@@ -332,5 +333,5 @@ func ParseCommand[T any](env Envelope) (T, error) {
 }
 
 func nowMillis() int64 {
-	return 0 // placeholder — real impl uses time.Now().UnixMilli()
+	return time.Now().UnixMilli()
 }

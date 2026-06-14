@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/falke-ai-circuit/hermes-remote/internal/protocol"
@@ -54,6 +56,9 @@ func (s *Server) Start() error {
 	// WebSocket endpoint
 	s.mux.HandleFunc("/ws", s.handleWebSocket)
 
+	// Health endpoint
+	s.mux.HandleFunc("/health", s.handleHealth)
+
 	// HTTP API endpoints
 	s.mux.HandleFunc("/api/agents", s.handleListAgents)
 	s.mux.HandleFunc("/api/agent/", s.handleAgentRoute)
@@ -71,6 +76,7 @@ func (s *Server) StartTLS(certFile, keyFile string) error {
 	}
 
 	s.mux.HandleFunc("/ws", s.handleWebSocket)
+	s.mux.HandleFunc("/health", s.handleHealth)
 	s.mux.HandleFunc("/api/agents", s.handleListAgents)
 	s.mux.HandleFunc("/api/agent/", s.handleAgentRoute)
 
@@ -212,6 +218,12 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case action == "shell" && r.Method == http.MethodPost:
 		s.handleAgentShell(w, r, agentID)
+	case action == "fs-read" && r.Method == http.MethodPost:
+		s.handleAgentFSRead(w, r, agentID)
+	case action == "fs-write" && r.Method == http.MethodPost:
+		s.handleAgentFSWrite(w, r, agentID)
+	case action == "screenshot" && r.Method == http.MethodPost:
+		s.handleAgentScreenshot(w, r, agentID)
 	default:
 		http.Error(w, "not found", http.StatusNotFound)
 	}
@@ -239,6 +251,7 @@ func (s *Server) handleAgentShell(w http.ResponseWriter, r *http.Request, agentI
 	start := time.Now()
 
 	cmd := exec.Command("sh", "-c", params.Command)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if params.WorkDir != "" {
 		cmd.Dir = params.WorkDir
 	}
@@ -249,34 +262,42 @@ func (s *Server) handleAgentShell(w http.ResponseWriter, r *http.Request, agentI
 		}
 	}
 
-	// Apply timeout
-	done := make(chan error, 1)
+	// Run command with timeout
+	type cmdResult struct {
+		output []byte
+		err    error
+	}
+	done := make(chan cmdResult, 1)
 	go func() {
-		done <- cmd.Run()
+		out, err := cmd.CombinedOutput()
+		done <- cmdResult{out, err}
 	}()
 
-	var timedOut bool
-	timeout := time.Duration(params.Timeout) * time.Second
+	var output []byte
+	var cmdErr error
+	timedOut := false
+
 	select {
-	case err = <-done:
-		timedOut = false
-	case <-time.After(timeout):
-		cmd.Process.Kill()
+	case res := <-done:
+		output = res.output
+		cmdErr = res.err
+	case <-time.After(time.Duration(params.Timeout) * time.Second):
+		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		<-done // wait for goroutine to finish after killing
 		timedOut = true
-		<-done
 	}
 
 	exitCode := 0
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+	if cmdErr != nil {
+		if exitErr, ok := cmdErr.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
-		} else {
+		} else if !timedOut {
 			exitCode = -1
 		}
 	}
 
 	result := protocol.ShellResult{
-		Stdout:     "", // output captured separately
+		Stdout:     string(output),
 		Stderr:     "",
 		ExitCode:   exitCode,
 		DurationMs: time.Since(start).Milliseconds(),
@@ -285,7 +306,7 @@ func (s *Server) handleAgentShell(w http.ResponseWriter, r *http.Request, agentI
 
 	// Store result in session
 	s.sessions.AddMemory(agentID, "last_shell", params.Command)
-	s.sessions.AddMemory(agentID, fmt.Sprintf("shell_%d", time.Now().UnixMilli()), fmt.Sprintf("exit=%d timed_out=%v", exitCode, timedOut))
+	s.sessions.AddMemory(agentID, fmt.Sprintf("shell_%d", time.Now().UnixMilli()), fmt.Sprintf("exit=%d", exitCode))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
@@ -294,4 +315,125 @@ func (s *Server) handleAgentShell(w http.ResponseWriter, r *http.Request, agentI
 func mustMarshalRaw(v interface{}) []byte {
 	data, _ := json.Marshal(v)
 	return data
+}
+
+// handleAgentFSRead reads a file on behalf of an agent.
+func (s *Server) handleAgentFSRead(w http.ResponseWriter, r *http.Request, agentID string) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	var params protocol.FSParams
+	if err := json.Unmarshal(body, &params); err != nil {
+		http.Error(w, fmt.Sprintf("invalid JSON: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	data, err := os.ReadFile(params.Path)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("read failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if params.Offset > 0 && params.Offset < len(data) {
+		data = data[params.Offset:]
+	}
+	if params.Limit > 0 && params.Limit < len(data) {
+		data = data[:params.Limit]
+	}
+
+	result := protocol.FSReadResult{
+		Data:     base64.StdEncoding.EncodeToString(data),
+		Size:     int64(len(data)),
+		Encoding: "base64",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+// handleAgentFSWrite writes a file on behalf of an agent.
+func (s *Server) handleAgentFSWrite(w http.ResponseWriter, r *http.Request, agentID string) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	var params protocol.FSParams
+	if err := json.Unmarshal(body, &params); err != nil {
+		http.Error(w, fmt.Sprintf("invalid JSON: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	raw, err := base64.StdEncoding.DecodeString(params.Data)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid base64: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	if err := os.WriteFile(params.Path, raw, 0644); err != nil {
+		http.Error(w, fmt.Sprintf("write failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	result := protocol.FSWriteResult{Written: len(raw), Path: params.Path}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+// handleAgentScreenshot captures a screenshot on behalf of an agent.
+func (s *Server) handleAgentScreenshot(w http.ResponseWriter, r *http.Request, agentID string) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	var params protocol.ScreenParams
+	if err := json.Unmarshal(body, &params); err != nil {
+		http.Error(w, fmt.Sprintf("invalid JSON: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Try import (ImageMagick), fallback to scrot
+	cmd := exec.Command("import", "-window", "root", "-")
+	out, err := cmd.Output()
+	if err != nil {
+		cmd2 := exec.Command("scrot", "-")
+		out, err = cmd2.Output()
+		if err != nil {
+			result := protocol.ScreenshotResult{
+				Format:    "error",
+				Width:     0,
+				Height:    0,
+				Data:      "",
+				SizeBytes: 0,
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(result)
+			return
+		}
+	}
+
+	result := protocol.ScreenshotResult{
+		Format:    "png",
+		Width:     0,
+		Height:    0,
+		Data:      base64.StdEncoding.EncodeToString(out),
+		SizeBytes: int64(len(out)),
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+// handleHealth returns a simple health check.
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"status":"ok"}`))
 }
