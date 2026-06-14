@@ -51,6 +51,11 @@ func main() {
 		Name:  *name,
 	}
 
+	// Ensure the WebSocket URL includes the /ws path the server expects
+	if cfg.URL != "" && !strings.Contains(cfg.URL, "/ws") {
+		cfg.URL = strings.TrimRight(cfg.URL, "/") + "/ws"
+	}
+
 	if *listenAddr != "" {
 		cfg.Mode = "inbound"
 	}
