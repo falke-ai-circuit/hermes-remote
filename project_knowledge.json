@@ -86,7 +86,7 @@
     {
       "key": "phase_e_status",
       "value": "in_progress",
-      "note": "Commit 5/5 complete: reconnect hardening (a0a20fd) + Windows real PowerShell (d16dff3) + macOS real (438ebc7) + rate limiting (Commit 4) + health monitoring (Commit 5). Remaining: TLS mutual auth, token rotation."
+      "note": "Commit 6/7 complete: reconnect hardening + Windows real + macOS real + rate limiting + health monitoring + token rotation. Remaining: TLS mutual auth (Commit 7)."
     },
     {
       "key": "rate_limiting",

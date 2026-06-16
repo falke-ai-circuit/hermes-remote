@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand/v2"
 	"net/http"
+	"os"
 	"runtime"
 	"sync"
 	"time"
@@ -36,6 +37,7 @@ type Config struct {
 	MaxRetries int           // 0 = infinite retries
 	BackoffMin time.Duration // default 1s
 	BackoffMax time.Duration // default 60s
+	TokenFile  string        // path to persist token (empty = no persistence)
 }
 
 // Agent is the remote agent instance.
@@ -50,6 +52,11 @@ type Agent struct {
 	plat           platform.Platform
 	server         *protocol.Server
 	stopped        chan struct{}
+
+	// tokenExpiry is the expiry time of the current token, if the server has
+	// issued a rotating token with an expiry. A zero value means "no expiry".
+	// Guarded by mu alongside cfg.Token.
+	tokenExpiry time.Time
 }
 
 // New creates a new agent.
@@ -187,6 +194,14 @@ func (a *Agent) handleConnection(conn *websocket.Conn) {
 	pingTicker := time.NewTicker(pingInterval)
 	defer pingTicker.Stop()
 
+	// Token-refresh ticker: checks every minute whether the current token is
+	// close to expiry and, if so, asks the server for a new one proactively.
+	refreshInterval := 60 * time.Second
+	refreshTicker := time.NewTicker(refreshInterval)
+	defer refreshTicker.Stop()
+	// refreshLeadTime is how far before expiry the agent requests a new token.
+	const refreshLeadTime = 5 * time.Minute
+
 	// Read messages
 	readErr := make(chan error, 1)
 	go func() {
@@ -226,6 +241,22 @@ func (a *Agent) handleConnection(conn *websocket.Conn) {
 			}); err != nil {
 				log.Printf("[agent] ping failed: %v", err)
 				return
+			}
+		case <-refreshTicker.C:
+			// Proactive refresh: if the token has an expiry and we're within
+			// refreshLeadTime of it, ask the server to rotate the token now.
+			a.mu.Lock()
+			expiry := a.tokenExpiry
+			a.mu.Unlock()
+			if !expiry.IsZero() && time.Now().Add(refreshLeadTime).After(expiry) {
+				log.Printf("[agent] token nearing expiry (%v), requesting refresh", expiry)
+				refreshEnv := protocol.Envelope{
+					ID:   fmt.Sprintf("token-refresh-%d", time.Now().UnixMilli()),
+					Type: protocol.TypeTokenRefresh,
+				}
+				if err := protocol.WriteMessage(conn, refreshEnv); err != nil {
+					log.Printf("[agent] token refresh request failed: %v", err)
+				}
 			}
 		}
 	}
@@ -534,9 +565,54 @@ func (a *Agent) handleTokenRotate(env protocol.Envelope) protocol.Envelope {
 		return protocol.NewError(env.ID, protocol.ErrInvalidParams, err.Error())
 	}
 	a.mu.Lock()
+	oldToken := a.cfg.Token
 	a.cfg.Token = params.NewToken
+	// Track the expiry so the proactive-refresh loop can request a new token
+	// before this one expires. A zero Expiry means the server did not set one.
+	a.tokenExpiry = params.Expiry
 	a.mu.Unlock()
-	return protocol.NewResult(env.ID, protocol.TypeTokenRotateResult, map[string]bool{"rotated": true})
+
+	// Persist the new token to disk so reconnects use the rotated token.
+	if a.cfg.TokenFile != "" {
+		if err := a.persistToken(params.NewToken); err != nil {
+			log.Printf("[agent] failed to persist rotated token: %v", err)
+		} else {
+			log.Printf("[agent] persisted rotated token to %s", a.cfg.TokenFile)
+		}
+	}
+
+	log.Printf("[agent] token rotated (old len=%d, new len=%d)", len(oldToken), len(params.NewToken))
+	return protocol.NewResult(env.ID, protocol.TypeTokenRotateResult, protocol.TokenRotateResult{
+		Rotated:  true,
+		NewToken: params.NewToken,
+	})
+}
+
+// persistToken writes the token to the configured TokenFile with 0600 perms.
+// It is called by handleTokenRotate after a successful rotation so reconnects
+// pick up the new token automatically.
+func (a *Agent) persistToken(token string) error {
+	if a.cfg.TokenFile == "" {
+		return nil
+	}
+	return os.WriteFile(a.cfg.TokenFile, []byte(token), 0600)
+}
+
+// LoadPersistedToken reads a previously persisted token from TokenFile. It
+// returns an empty string (and no error) if the file does not exist or is
+// empty. Used at startup to resume with the most recent rotated token.
+func LoadPersistedToken(path string) (string, error) {
+	if path == "" {
+		return "", nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return string(data), nil
 }
 
 func mustMarshal(v interface{}) json.RawMessage {

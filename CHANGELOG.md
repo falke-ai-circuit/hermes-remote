@@ -123,6 +123,30 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 - Zero new external deps (stdlib `log` added for stale-detector logging)
 - Build + vet pass: `go build ./cmd/...` exits 0, `go vet ./...` exits 0, `go test ./...` passes (existing 6/6 rate-limiter tests unaffected)
 
+#### Commit 6: Token Rotation (`TBD`)
+
+- **Server-side token rotation**: `Server` gains `tokenTTL time.Duration`, `tokenExpiry map[string]time.Time` (guarded by `tokenMu sync.Mutex`), `tokenStop chan struct{}`, and `tokenWG sync.WaitGroup` fields; `NewServer` initializes the map + channel
+- **NEW `InitiateTokenRotation(agentID, newToken) error`** — looks up the agent's WebSocket conn under `mu.RLock`, marshals a `TokenRotateParams{NewToken, Expiry}` envelope, and sends `TypeTokenRotate` to the agent. Returns an error if the agent is not connected. Used by the proactive rotation goroutine and by the agent-initiated refresh handler
+- **NEW proactive rotation goroutine** (`runTokenRotation`) — scans every 60s (`checkInterval`) for agents whose token is within 5 min of expiry (`rotationLeadTime`) and sends them a fresh token via `InitiateTokenRotation`; reschedules the next expiry relative to now. Started by `StartTokenRotation()` (no-op if `tokenTTL == 0`), called from `Start`/`StartTLS`; stopped cleanly in `Close` via `tokenStop` + `tokenWG` (no goroutine leak)
+- **NEW `SetTokenTTL(ttl)`, `SetTokenExpiry(agentID, expiry)`, `ClearTokenExpiry(agentID)`** — public methods to configure and manage per-agent token expiry; expiry is set on connect and after each rotation, cleared on disconnect
+- **NEW `generateToken() string`** — generates a fresh opaque token using `crypto/rand` (stdlib) → `encoding/hex` (24 bytes → 48 hex chars); falls back to a time-based token if `rand.Read` fails so rotation never blocks
+- **NEW `TypeTokenRefresh = "token_refresh"`** message type (Agent → Server) — agent sends this to request a proactive refresh when its token nears expiry; server handler generates a new token, sends it via `InitiateTokenRotation`, and reschedules expiry
+- **`handleMessages` switch extended**: `TypeTokenRotateResult` → parses `TokenRotateResult`, logs rotation, records `token_rotated_at` in session memory, reschedules expiry; `TypeTokenRefresh` → generates + sends new token, reschedules expiry
+- **Enhanced `TokenRotateParams`** (`internal/protocol/messages.go`) with optional `Expiry time.Time` field (zero = no expiry) so the server can tell the agent when the new token expires
+- **NEW `TokenRotateResult` struct** (`internal/protocol/messages.go`) with `Rotated bool` and `NewToken string` (omitempty, echo-back for confirmation) — replaces the ad-hoc `map[string]bool` the agent previously returned
+- **Enhanced agent `handleTokenRotate`** (`internal/agent/agent.go`):
+  - Tracks the new token in `a.cfg.Token` AND the expiry in `a.tokenExpiry` (new `Agent` field, guarded by `mu`)
+  - Persists the new token to disk via `persistToken()` (writes to `a.cfg.TokenFile` with 0600 perms) so reconnects use the rotated token
+  - Logs the rotation (old/new token lengths)
+  - Returns a proper `TokenRotateResult{Rotated: true, NewToken: ...}` envelope (was `map[string]bool`)
+- **NEW agent proactive refresh**: `handleConnection` loop gains a `refreshTicker` (60s) that checks `a.tokenExpiry`; if within 5 min of expiry it sends a `TypeTokenRefresh` envelope to the server, which responds with a new `TypeTokenRotate`
+- **NEW `LoadPersistedToken(path) (string, error)`** — exported helper in the agent package; reads a persisted token from disk at startup (returns "" + nil if the file doesn't exist), used by `cmd/hermes-remote/main.go` to resume with the latest rotated token after a restart
+- **CLI flag `--token-ttl duration`** (`cmd/server/main.go`, default `24h`) — server token rotation interval; `0` disables rotation. Wired via `srv.SetTokenTTL(*tokenTTL)`. Server startup log now includes `token-ttl=...`
+- **CLI flag `--token-file string`** (`cmd/hermes-remote/main.go`, default `.hermes-remote-token`) — path to persist the auth token so rotated tokens survive reconnects; empty disables persistence. At startup, if no `--token` was given, the agent loads any persisted token from this file
+- **`Config` gains `TokenFile string`** field; `Agent` gains `tokenExpiry time.Time` field (guarded by `mu`)
+- Zero new external deps (stdlib `crypto/rand`, `encoding/hex`, `os` only). Build + vet + tests pass: `go build ./cmd/...` exits 0, `go vet ./...` exits 0, `go test ./...` passes, cross-compile (darwin/linux/windows × amd64/arm64) exits 0
+- Backward compatible: existing `TypeTokenRotate` and `TokenRotateParams.NewToken` unchanged (only added optional `Expiry` field)
+
 ### Phase D — Kali Integration Test (2026-06-16)
 
 | Test | Result |
@@ -153,7 +177,7 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 | 3 | `--addr :7705` ignored, server always on `localhost:7700` | `main.go` only read env var, no flag parsing | Added `flag.String` for `--addr`, `--token`, `--registry` with env fallback |
 | 4 | Screenshot produced PostScript, not PNG | `import` defaults to PS when piping to stdout | Changed to `png:-` format specifier |
 
-### Commits (8 total)
+### Commits (11 total)
 
 | # | Commit | Description |
 |---|--------|-------------|
@@ -167,6 +191,7 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 | 8 | `438ebc7` | feat: Phase E Commit 3 — macOS real implementation (25 functions via native CLI tools) |
 | 9 | `947c306` | feat: Phase E Commit 4 — per-agent token-bucket rate limiter + CLI flags (--rate-limit/--rate-burst/--max-concurrent) |
 | 10 | `4b89328` | feat: Phase E Commit 5 — health monitoring (AgentRecord extensions, stale detector, RecordError/UpdateHealth/GetHealth, /api/agent/{id}/health, enhanced /health) |
+| 11 | `TBD` | feat: Phase E Commit 6 — token rotation (InitiateTokenRotation, proactive rotation goroutine, TokenRotateResult, agent token persistence + proactive refresh, --token-ttl, --token-file) |
 
 ### Planned
 - Phase E: Production hardening (TLS mutual auth, token rotation, Windows/macOS real implementations, rate limiting, health monitoring)

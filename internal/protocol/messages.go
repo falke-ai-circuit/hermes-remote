@@ -36,6 +36,7 @@ const (
 	TypeClipboardGet = "clipboard_get"
 	TypeClipboardSet = "clipboard_set"
 	TypeTokenRotate  = "token_rotate"
+	TypeTokenRefresh = "token_refresh" // Agent → Server: request proactive token rotation
 	TypeStreamStart  = "stream_start"
 	TypeStreamStop   = "stream_stop"
 
@@ -289,7 +290,14 @@ type ClipboardSetParams struct {
 }
 
 type TokenRotateParams struct {
-	NewToken string `json:"new_token"`
+	NewToken string    `json:"new_token"`
+	Expiry   time.Time `json:"expiry,omitempty"` // zero = no expiry
+}
+
+// TokenRotateResult is the agent's response confirming a token rotation.
+type TokenRotateResult struct {
+	Rotated  bool   `json:"rotated"`
+	NewToken string `json:"new_token,omitempty"` // echo back for confirmation
 }
 
 // NewError creates an error envelope.

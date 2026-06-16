@@ -80,7 +80,7 @@
 
 **10/10 PASS.** 3 bugs found and fixed during testing (screenshot env, process-list route, --addr flag).
 
-## Phase E — Production Hardening ⏳ (Commit 5/5 complete)
+## Phase E — Production Hardening ⏳ (Commit 6/6 complete)
 
 ### E1: Reconnect Hardening ✅ (`a0a20fd`)
 - Exponential backoff + jitter in `runOutbound()` (replaces fixed 5s)
@@ -126,9 +126,22 @@
 - **Error recording wired** into `handleMessages` (`TypeError` → `RecordError`, `TypeHealthResult` → `UpdateHealth`)
 - Zero new external deps (stdlib `log` only). Build + vet + tests pass (`go test ./...`)
 
-### E6: Remaining
+### E6: Token Rotation ✅
+- **Server-side token rotation**: `Server` gains `tokenTTL`, `tokenExpiry` map, `tokenStop` channel, `tokenWG`; `NewServer` initializes them
+- **NEW `InitiateTokenRotation(agentID, newToken) error`** — sends `TypeTokenRotate` with `TokenRotateParams{NewToken, Expiry}` to the agent via its WebSocket conn; error if not connected
+- **NEW proactive rotation goroutine** (`runTokenRotation`) — scans every 60s, rotates tokens within 5 min of expiry, reschedules next expiry. Started in `Start`/`StartTLS` (no-op if `tokenTTL == 0`), stopped in `Close` (no leak)
+- **NEW `SetTokenTTL`/`SetTokenExpiry`/`ClearTokenExpiry`** + `generateToken()` (crypto/rand → hex, 48-char token)
+- **NEW `TypeTokenRefresh`** message (Agent → Server) — agent requests proactive refresh; server generates + sends new token
+- **`handleMessages` switch**: `TypeTokenRotateResult` → logs + records in session memory + reschedules expiry; `TypeTokenRefresh` → generates + sends new token
+- **Protocol**: `TokenRotateParams` gains optional `Expiry time.Time`; NEW `TokenRotateResult{Rotated, NewToken}` struct
+- **Enhanced agent `handleTokenRotate`**: updates `a.cfg.Token` + `a.tokenExpiry`, persists to `TokenFile` (0600), logs rotation, returns proper `TokenRotateResult`
+- **Agent proactive refresh**: `handleConnection` gains 60s `refreshTicker`; within 5 min of expiry sends `TypeTokenRefresh`
+- **NEW `LoadPersistedToken(path)`** — exported helper; agent loads persisted token at startup if no `--token` given
+- **CLI flags**: `--token-ttl` (server, default 24h, 0=disabled), `--token-file` (agent, default `.hermes-remote-token`)
+- Zero new deps (stdlib `crypto/rand`, `encoding/hex`, `os`). Build + vet + tests + cross-compile pass
+
+### E7: Remaining
 - TLS mutual authentication (client certs)
-- Token rotation (expiring tokens, refresh flow)
 
 ## Phase F — Final Review + Release ⏳
 

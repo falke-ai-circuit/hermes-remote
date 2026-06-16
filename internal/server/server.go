@@ -1,7 +1,9 @@
 package server
 
 import (
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -39,6 +41,12 @@ type Server struct {
 
 	mu        sync.RWMutex
 	conns     map[string]*websocket.Conn // agentID -> conn
+
+	tokenTTL    time.Duration                 // configured token TTL (0 = rotation disabled)
+	tokenExpiry map[string]time.Time          // agentID -> token expiry time
+	tokenMu     sync.Mutex                    // guards tokenExpiry
+	tokenStop   chan struct{}                 // closes to stop rotation goroutine
+	tokenWG     sync.WaitGroup                // waits for rotation goroutine on shutdown
 }
 
 // startTime records when the server process began, used by /health for uptime.
@@ -49,12 +57,14 @@ func NewServer(addr string, token string, registryPath string) *Server {
 	reg := NewRegistry(registryPath)
 	reg.StartStaleDetector()
 	return &Server{
-		addr:     addr,
-		token:    token,
-		registry: reg,
-		sessions: NewSessionManager(),
-		proxy:    NewLLMProxy(),
-		conns:    make(map[string]*websocket.Conn),
+		addr:        addr,
+		token:       token,
+		registry:    reg,
+		sessions:    NewSessionManager(),
+		proxy:       NewLLMProxy(),
+		conns:       make(map[string]*websocket.Conn),
+		tokenExpiry: make(map[string]time.Time),
+		tokenStop:   make(chan struct{}),
 	}
 }
 
@@ -67,6 +77,93 @@ func NewServerWithRateLimit(addr string, token string, registryPath string, rlCf
 	srv.rateLimit = NewRateLimiter(rlCfg.RatePerSec, rlCfg.Burst, rlCfg.MaxConcurrent)
 	srv.proxy.SetRateLimiter(srv.rateLimit)
 	return srv
+}
+
+// SetTokenTTL configures the server-side token rotation interval. When ttl > 0
+// the server runs a background goroutine that proactively rotates each
+// connected agent's token ttl before it expires. A ttl of 0 disables
+// rotation. Must be called before Start/StartTLS.
+func (s *Server) SetTokenTTL(ttl time.Duration) {
+	s.tokenTTL = ttl
+}
+
+// generateToken produces a fresh opaque token for rotation. It uses crypto/rand
+// (stdlib) so the token is unpredictable enough for an auth bearer string.
+// On the unlikely chance rand.Read fails it falls back to a time-based token so
+// rotation never blocks.
+func generateToken() string {
+	var b [24]byte
+	if _, err := rand.Read(b[:]); err == nil {
+		return hex.EncodeToString(b[:])
+	}
+	return fmt.Sprintf("tok-%d", time.Now().UnixNano())
+}
+
+// StartTokenRotation launches the background goroutine that proactively
+// rotates tokens before they expire. It is a no-op if tokenTTL is zero. Safe
+// to call once; started automatically by Start/StartTLS when tokenTTL > 0.
+func (s *Server) StartTokenRotation() {
+	if s.tokenTTL <= 0 {
+		return
+	}
+	s.tokenWG.Add(1)
+	go s.runTokenRotation()
+}
+
+// runTokenRotation scans every minute for agents whose token is close to
+// expiry and sends them a new token via InitiateTokenRotation. It records the
+// new expiry in the tokenExpiry map so the next rotation is scheduled relative
+// to the new token. Exits when tokenStop is closed (in Close).
+func (s *Server) runTokenRotation() {
+	defer s.tokenWG.Done()
+	// Check every minute. rotationLeadTime is how far before expiry we rotate.
+	const checkInterval = 60 * time.Second
+	const rotationLeadTime = 5 * time.Minute
+	ticker := time.NewTicker(checkInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.tokenStop:
+			return
+		case <-ticker.C:
+			now := time.Now()
+			s.tokenMu.Lock()
+			for agentID, expiry := range s.tokenExpiry {
+				// Rotate when within rotationLeadTime of expiry (or already past).
+				if !expiry.IsZero() && now.Add(rotationLeadTime).After(expiry) {
+					newToken := generateToken()
+					if err := s.InitiateTokenRotation(agentID, newToken); err != nil {
+						log.Printf("[server] token rotation failed for agent %s: %v", agentID, err)
+						continue
+					}
+					// Schedule next expiry relative to now.
+					s.tokenExpiry[agentID] = now.Add(s.tokenTTL)
+					log.Printf("[server] proactively rotated token for agent %s (next expiry in %v)", agentID, s.tokenTTL)
+				}
+			}
+			s.tokenMu.Unlock()
+		}
+	}
+}
+
+// SetTokenExpiry records the expiry time for an agent's token. Called when an
+// agent connects (the server issues a TTL-based expiry) or after a manual
+// rotation. A zero expiry means "no expiry tracking".
+func (s *Server) SetTokenExpiry(agentID string, expiry time.Time) {
+	s.tokenMu.Lock()
+	defer s.tokenMu.Unlock()
+	if expiry.IsZero() {
+		delete(s.tokenExpiry, agentID)
+		return
+	}
+	s.tokenExpiry[agentID] = expiry
+}
+
+// ClearTokenExpiry removes the expiry tracking for an agent (called on disconnect).
+func (s *Server) ClearTokenExpiry(agentID string) {
+	s.tokenMu.Lock()
+	defer s.tokenMu.Unlock()
+	delete(s.tokenExpiry, agentID)
 }
 
 // Start begins listening for WebSocket and HTTP connections.
@@ -87,6 +184,9 @@ func (s *Server) Start() error {
 	s.mux.HandleFunc("/api/agents", s.handleListAgents)
 	s.mux.HandleFunc("/api/agent/", s.handleAgentRoute)
 
+	// Start proactive token rotation if a TTL was configured.
+	s.StartTokenRotation()
+
 	log.Printf("[server] starting on %s", s.addr)
 	return s.srv.ListenAndServe()
 }
@@ -104,13 +204,20 @@ func (s *Server) StartTLS(certFile, keyFile string) error {
 	s.mux.HandleFunc("/api/agents", s.handleListAgents)
 	s.mux.HandleFunc("/api/agent/", s.handleAgentRoute)
 
+	// Start proactive token rotation if a TTL was configured.
+	s.StartTokenRotation()
+
 	log.Printf("[server] starting TLS on %s", s.addr)
 	return s.srv.ListenAndServeTLS(certFile, keyFile)
 }
 
-// Close shuts down the server and stops the stale-detector goroutine.
+// Close shuts down the server, stops the stale-detector goroutine, and stops
+// the token rotation goroutine (if running).
 func (s *Server) Close() error {
 	s.registry.Stop()
+	// Stop the token rotation goroutine and wait for it to drain.
+	close(s.tokenStop)
+	s.tokenWG.Wait()
 	if s.srv != nil {
 		return s.srv.Close()
 	}
@@ -172,6 +279,11 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	s.conns[agentID] = conn
 	s.mu.Unlock()
 
+	// Track token expiry so the rotation goroutine can proactively rotate it.
+	if s.tokenTTL > 0 {
+		s.SetTokenExpiry(agentID, time.Now().Add(s.tokenTTL))
+	}
+
 	log.Printf("[server] agent connected: %s (%s/%s, mode=%s)", agentID, info.OS, info.Arch, info.Mode)
 
 	// Handle messages
@@ -187,6 +299,7 @@ func (s *Server) handleMessages(agentID string, conn *websocket.Conn) {
 		s.mu.Unlock()
 		s.registry.Unregister(agentID)
 		s.sessions.RemoveSession(agentID)
+		s.ClearTokenExpiry(agentID)
 		log.Printf("[server] agent disconnected: %s", agentID)
 	}()
 
@@ -224,12 +337,67 @@ func (s *Server) handleMessages(agentID string, conn *websocket.Conn) {
 				s.registry.RecordError(agentID, env.Error.Message)
 			}
 
+		case protocol.TypeTokenRotateResult:
+			// Agent confirmed it applied a rotated token. Record the event and
+			// schedule the next expiry from now (relative to the new token).
+			var result protocol.TokenRotateResult
+			if env.Result != nil {
+				_ = json.Unmarshal(env.Result, &result)
+			}
+			log.Printf("[server] agent %s rotated token (rotated=%v)", agentID, result.Rotated)
+			s.sessions.AddMemory(agentID, "token_rotated_at", time.Now().UTC().Format(time.RFC3339))
+			if s.tokenTTL > 0 {
+				s.SetTokenExpiry(agentID, time.Now().Add(s.tokenTTL))
+			}
+
+		case protocol.TypeTokenRefresh:
+			// Agent requested a proactive token refresh (its token is nearing
+			// expiry). Generate a new token and send it back.
+			newToken := generateToken()
+			if err := s.InitiateTokenRotation(agentID, newToken); err != nil {
+				log.Printf("[server] proactive refresh failed for agent %s: %v", agentID, err)
+			} else {
+				log.Printf("[server] sent refreshed token to agent %s", agentID)
+				if s.tokenTTL > 0 {
+					s.SetTokenExpiry(agentID, time.Now().Add(s.tokenTTL))
+				}
+			}
+
 		default:
 			// Store results in session context if relevant
 			s.sessions.AddMemory(agentID, "last_msg_type", env.Type)
 			s.sessions.AddMemory(agentID, fmt.Sprintf("msg_%d", time.Now().UnixMilli()), string(mustMarshalRaw(env)))
 		}
 	}
+}
+
+// InitiateTokenRotation sends a token_rotate command to the agent with the new
+// token. It is used by the proactive rotation goroutine and can also be called
+// manually (e.g. from an admin endpoint). Returns an error if the agent is not
+// connected.
+func (s *Server) InitiateTokenRotation(agentID string, newToken string) error {
+	s.mu.RLock()
+	conn, ok := s.conns[agentID]
+	s.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("agent %s not connected", agentID)
+	}
+	params := protocol.TokenRotateParams{
+		NewToken: newToken,
+	}
+	if s.tokenTTL > 0 {
+		params.Expiry = time.Now().Add(s.tokenTTL)
+	}
+	paramData, _ := json.Marshal(params)
+	env := protocol.Envelope{
+		ID:     fmt.Sprintf("token-rotate-%d", time.Now().UnixMilli()),
+		Type:   protocol.TypeTokenRotate,
+		Params: paramData,
+	}
+	if err := conn.WriteJSON(env); err != nil {
+		return fmt.Errorf("send token_rotate: %w", err)
+	}
+	return nil
 }
 
 // handleListAgents returns the list of registered agents as JSON.

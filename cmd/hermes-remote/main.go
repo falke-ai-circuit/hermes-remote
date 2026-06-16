@@ -23,6 +23,7 @@ var (
 	maxRetries = flag.Int("max-retries", 0, "Max reconnect attempts (0=infinite)")
 	backoffMin = flag.Duration("backoff-min", 1*time.Second, "Min backoff duration")
 	backoffMax = flag.Duration("backoff-max", 60*time.Second, "Max backoff duration")
+	tokenFile  = flag.String("token-file", ".hermes-remote-token", "Path to persist the auth token so rotated tokens survive reconnects (empty = no persistence)")
 )
 
 func main() {
@@ -43,6 +44,19 @@ func main() {
 	if tokenVal != *token {
 		log.Printf("[agent] stripped quotes from token (was %d chars, now %d chars)", len(*token), len(tokenVal))
 	}
+
+	// If a token-file is configured and no --token was given on the command
+	// line, try to resume with a previously persisted (rotated) token. This
+	// lets the agent reconnect with the latest rotated token after a restart.
+	if tokenVal == "" && *tokenFile != "" {
+		if persisted, err := agent.LoadPersistedToken(*tokenFile); err != nil {
+			log.Printf("[agent] warning: could not read token file %s: %v", *tokenFile, err)
+		} else if persisted != "" {
+			tokenVal = persisted
+			log.Printf("[agent] resumed with persisted token from %s (len=%d)", *tokenFile, len(tokenVal))
+		}
+	}
+
 	if tokenVal != "" {
 		log.Printf("[agent] token length=%d first_char=%c last_char=%c", len(tokenVal), tokenVal[0], tokenVal[len(tokenVal)-1])
 	}
@@ -56,6 +70,7 @@ func main() {
 		MaxRetries: *maxRetries,
 		BackoffMin: *backoffMin,
 		BackoffMax: *backoffMax,
+		TokenFile:  *tokenFile,
 	}
 
 	// Ensure the WebSocket URL includes the /ws path the server expects
