@@ -1,7 +1,7 @@
 {
   "project": "hermes-remote",
   "version": "v0.1.0-a0",
-  "last_updated": "2026-06-16T18:35:00Z",
+  "last_updated": "2026-06-16T19:00:00Z",
   "hot_cache": [
     {
       "key": "module_path",
@@ -77,6 +77,16 @@
       "key": "kali_host",
       "value": "100.78.148.26:2222",
       "note": "Kali Linux container, SSH root:kali, Xvfb on :1, import+scrot installed"
+    },
+    {
+      "key": "reconnect_backoff",
+      "value": "exponential + jitter",
+      "note": "Phase E Commit 1: runOutbound() uses min*2^(attempt-1) capped at max, with math/rand/v2 jitter. Defaults: MaxRetries=0 (infinite), BackoffMin=1s, BackoffMax=60s. CLI flags: --max-retries, --backoff-min, --backoff-max."
+    },
+    {
+      "key": "phase_e_status",
+      "value": "in_progress",
+      "note": "Commit 1/4 complete: reconnect hardening (a0a20fd). Remaining: TLS mutual auth, token rotation, Windows/macOS real implementations."
     }
   ],
   "architecture": {
@@ -84,7 +94,7 @@
       "purpose": "Agent binary — CLI entry point",
       "depends_on": ["internal/agent", "internal/protocol", "internal/platform"],
       "key_files": ["main.go"],
-      "flags": ["--connect", "--listen", "--mode", "--token", "--name"]
+      "flags": ["--connect", "--listen", "--mode", "--token", "--name", "--max-retries", "--backoff-min", "--backoff-max"]
     },
     "cmd/server": {
       "purpose": "Server binary — WebSocket server + LLM proxy",
@@ -178,6 +188,19 @@
     }
   ],
   "recent_changes": [
+    {
+      "version": "v0.1.0-a0",
+      "date": "2026-06-16",
+      "summary": "Phase E Commit 1: Reconnect Hardening — replaced fixed 5s backoff with exponential backoff + jitter. Added Config fields (MaxRetries, BackoffMin, BackoffMax), computeBackoff() method, CLI flags (--max-retries, --backoff-min, --backoff-max). Build and vet pass cleanly.",
+      "files": [
+        "internal/agent/agent.go",
+        "cmd/hermes-remote/main.go",
+        "CHANGELOG.md",
+        "ROADMAP.md",
+        "project_knowledge.json",
+        "BLUEPRINT.md"
+      ]
+    },
     {
       "version": "v0.1.0-a0",
       "date": "2026-06-16",

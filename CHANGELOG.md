@@ -38,6 +38,18 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 
 ## [Unreleased]
 
+### Phase E — Production Hardening (2026-06-16)
+
+#### Commit 1: Reconnect Hardening (`a0a20fd`)
+
+- Replaced fixed 5s backoff in `runOutbound()` with exponential backoff + jitter
+- Added `Config` fields: `MaxRetries` (0=infinite), `BackoffMin` (default 1s), `BackoffMax` (default 60s)
+- Added `backoffAttempt` counter to `Agent` struct, reset on successful connection
+- Added `computeBackoff()` method: `min * 2^(attempt-1)` capped at max, with jitter via `math/rand/v2`
+- Wired CLI flags: `--max-retries`, `--backoff-min`, `--backoff-max`
+- Zero new external deps (`math/rand/v2` is stdlib in Go 1.22)
+- Build and vet pass cleanly
+
 ### Phase D — Kali Integration Test (2026-06-16)
 
 | Test | Result |
@@ -68,7 +80,7 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 | 3 | `--addr :7705` ignored, server always on `localhost:7700` | `main.go` only read env var, no flag parsing | Added `flag.String` for `--addr`, `--token`, `--registry` with env fallback |
 | 4 | Screenshot produced PostScript, not PNG | `import` defaults to PS when piping to stdout | Changed to `png:-` format specifier |
 
-### Commits (5 total)
+### Commits (6 total)
 
 | # | Commit | Description |
 |---|--------|-------------|
@@ -77,7 +89,8 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 | 3 | `dc02281` | fix: append /ws path to agent connect URL if missing |
 | 4 | `c5dde2c` | fix: cross-platform shell + CODER rule #6 + Windows platform stubs |
 | 5 | `b25a852` | fix: Phase D — process-list endpoint, screenshot env+PNG, --addr flag wiring |
+| 6 | `a0a20fd` | feat: Phase E Commit 1 — exponential backoff + jitter reconnect hardening |
 
 ### Planned
-- Phase E: Production hardening (TLS mutual auth, token rotation, reconnect)
+- Phase E: Production hardening (TLS mutual auth, token rotation, Windows/macOS real implementations)
 - Phase F: Final review + v1.0.0 release

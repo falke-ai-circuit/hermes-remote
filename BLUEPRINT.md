@@ -3,7 +3,7 @@
 **Author:** Architect (via Orchestrator)
 **Date:** 2026-06-13
 **Last Updated:** 2026-06-16
-**Status:** ACTIVE — Phase A-D complete, Phase E pending
+**Status:** ACTIVE — Phase A-D complete, Phase E in progress (Commit 1/4: reconnect hardening)
 **Repo:** `github.com/falke-ai-circuit/hermes-remote`
 **Branch:** `main`
 **Tag:** `v0.1.0-a0`
@@ -137,7 +137,7 @@ hermes-remote/
 | **B** | Fixes — 8 bugs across 6 files, Go agent connects, all 4 endpoints verified | ✅ Complete |
 | **C** | Plugin — 5 remote_* tools registered, tested | ✅ Complete |
 | **D** | Integration test on remote host (Kali Linux) | ✅ Complete — 7/7 PASS |
-| **E** | Production hardening — TLS mutual auth, token rotation, reconnect | ⏳ Pending |
+| **E** | Production hardening — TLS mutual auth, token rotation, reconnect | ⏳ In Progress — Commit 1/4 (reconnect hardening) |
 | **F** | Final review + v1.0.0 release | ⏳ Pending |
 
 ## 10. Success Criteria

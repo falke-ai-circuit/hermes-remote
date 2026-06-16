@@ -80,11 +80,18 @@
 
 **10/10 PASS.** 3 bugs found and fixed during testing (screenshot env, process-list route, --addr flag).
 
-## Phase E — Production Hardening ⏳
+## Phase E — Production Hardening ⏳ (Commit 1/4 complete)
 
+### E1: Reconnect Hardening ✅ (`a0a20fd`)
+- Exponential backoff + jitter in `runOutbound()` (replaces fixed 5s)
+- `Config` fields: `MaxRetries` (0=infinite), `BackoffMin` (1s), `BackoffMax` (60s)
+- `computeBackoff()` method with `math/rand/v2` jitter
+- CLI flags: `--max-retries`, `--backoff-min`, `--backoff-max`
+- Build and vet pass cleanly
+
+### E2-E4: Remaining
 - TLS mutual authentication (client certs)
 - Token rotation (expiring tokens, refresh flow)
-- Automatic reconnect on disconnect
 - Windows platform stub → real implementation
 - macOS platform stub → real implementation
 - Rate limiting on LLM proxy
@@ -110,7 +117,7 @@
 | B | 1-2 turns (parallel) | ✅ Complete |
 | C | 1 turn | ✅ Complete |
 | D | 1 turn | ✅ Complete — Kali Linux (100.78.148.26) |
-| E | 1-2 turns | ⏳ Pending |
+| E | 1-2 turns | ⏳ In Progress — Commit 1/4 complete (reconnect hardening) |
 | F | 1 turn | ⏳ Pending |
 
 **v0.1.0-a0 delivered: 3 commits, 2 binaries, 5 remote tools, 8 bugs fixed. Ready for Phase D integration test.**
