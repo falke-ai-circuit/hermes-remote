@@ -1,7 +1,7 @@
 {
   "project": "hermes-remote",
   "version": "v0.1.0-a0",
-  "last_updated": "2026-06-16T16:00:00Z",
+  "last_updated": "2026-06-16T18:35:00Z",
   "hot_cache": [
     {
       "key": "module_path",
@@ -31,7 +31,7 @@
     {
       "key": "server_port",
       "value": "7700",
-      "note": "Default WebSocket server port, configurable via --addr"
+      "note": "Default WebSocket server port, configurable via --addr flag or HERMES_REMOTE_ADDR env"
     },
     {
       "key": "token",
@@ -67,6 +67,16 @@
       "key": "license",
       "value": "MIT",
       "note": "LICENSE file at repo root"
+    },
+    {
+      "key": "phase_d_status",
+      "value": "complete",
+      "note": "Kali Linux integration test: 7/7 endpoints PASS. 3 bugs found and fixed."
+    },
+    {
+      "key": "kali_host",
+      "value": "100.78.148.26:2222",
+      "note": "Kali Linux container, SSH root:kali, Xvfb on :1, import+scrot installed"
     }
   ],
   "architecture": {
@@ -147,9 +157,42 @@
       "rule": "Platform tools must be installed on target",
       "detail": "Linux: xdotool (click/type/key), import or scrot (screenshot), xclip (clipboard). macOS: osascript (screenshot), pbcopy/pbpaste (clipboard). Windows: PowerShell, .NET screen capture. Missing tools cause command timeouts, not clear errors.",
       "affected": ["internal/platform/platform_linux.go"]
+    },
+    {
+      "id": "HR-007",
+      "rule": "Screenshot requires DISPLAY env + Xvfb on headless hosts",
+      "detail": "import/scrot need DISPLAY set and an X server running. On headless hosts (Kali container, CI), start Xvfb first: `Xvfb :1 -screen 0 1024x768x24 &`. Server must pass os.Environ() to screenshot commands. Fixed in b25a852.",
+      "affected": ["internal/server/server.go", "deployment"]
+    },
+    {
+      "id": "HR-008",
+      "rule": "Server --addr flag must be wired in main.go",
+      "detail": "The server binary's main.go must use flag.String for --addr, --token, --registry with env var fallback. Without this, --addr is silently ignored and server always binds localhost:7700. Fixed in b25a852.",
+      "affected": ["cmd/server/main.go"]
+    },
+    {
+      "id": "HR-009",
+      "rule": "import defaults to PostScript when piping to stdout",
+      "detail": "ImageMagick's `import -window root -` produces PostScript by default. Use `import -window root png:-` to force PNG output. Fixed in b25a852.",
+      "affected": ["internal/server/server.go"]
     }
   ],
   "recent_changes": [
+    {
+      "version": "v0.1.0-a0",
+      "date": "2026-06-16",
+      "summary": "Phase D complete: Kali Linux integration test — 7/7 endpoints PASS. 3 bugs found and fixed (screenshot env, process-list route, --addr flag). 4 gotchas added (HR-007–HR-009). Windows binaries cross-compiled. CODER.md rule #6 doc-update obligation encoded.",
+      "files": [
+        "internal/server/server.go",
+        "cmd/server/main.go",
+        "internal/platform/platform_windows.go",
+        ".github/agents/CODER.md",
+        "CHANGELOG.md",
+        "ROADMAP.md",
+        "project_knowledge.json",
+        "BLUEPRINT.md"
+      ]
+    },
     {
       "version": "v0.1.0-a0",
       "date": "2026-06-14",

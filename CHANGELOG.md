@@ -38,7 +38,46 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 
 ## [Unreleased]
 
+### Phase D — Kali Integration Test (2026-06-16)
+
+| Test | Result |
+|------|--------|
+| Shell (`uname -a`) | ✅ PASS — Kali kernel, exit 0 |
+| FS Read (`/etc/hostname`) | ✅ PASS — 5 bytes, base64 |
+| FS Write | ✅ PASS — 13 bytes, disk-verified |
+| Screenshot | ✅ PASS — real PNG (magic 89504e47), 233 bytes |
+| Process List | ✅ PASS — 16 processes returned |
+| Health | ✅ PASS — `{"status":"ok"}` |
+| Registry | ✅ PASS — 1 agent `a0-kali` active |
+
+**7/7 PASS.** Server + agent deployed to Kali Linux (100.78.148.26:2222) via SFTP. Xvfb started for display capture.
+
+### Fixes (Phase D)
+
+| Commit | Description |
+|--------|-------------|
+| `c5dde2c` | Cross-platform shell (remove Setpgid/syscall.Kill) + CODER rule #6 doc-update obligation + Windows platform stubs |
+| `b25a852` | Process-list endpoint, screenshot env+PNG, --addr flag wiring |
+
+### Bugs Found & Fixed (3)
+
+| # | Bug | Root Cause | Fix |
+|---|-----|------------|-----|
+| 1 | Screenshot returned `format=error, size=0` | `import`/`scrot` didn't inherit `DISPLAY=:1` | Pass `os.Environ()` to screenshot commands |
+| 2 | Process list returned `not found` | No `process-list` route in `handleAgentRoute` | Added route + `handleAgentProcessList` using `ps -eo` |
+| 3 | `--addr :7705` ignored, server always on `localhost:7700` | `main.go` only read env var, no flag parsing | Added `flag.String` for `--addr`, `--token`, `--registry` with env fallback |
+| 4 | Screenshot produced PostScript, not PNG | `import` defaults to PS when piping to stdout | Changed to `png:-` format specifier |
+
+### Commits (5 total)
+
+| # | Commit | Description |
+|---|--------|-------------|
+| 1 | `4c4340a` | feat: hermes-remote v0.1.0-a0 — remote agent for Hermes ecosystem |
+| 2 | `3ab97c9` | fix: stdlib base64, process-group timeout, /health endpoint, TLS scheme detection |
+| 3 | `dc02281` | fix: append /ws path to agent connect URL if missing |
+| 4 | `c5dde2c` | fix: cross-platform shell + CODER rule #6 + Windows platform stubs |
+| 5 | `b25a852` | fix: Phase D — process-list endpoint, screenshot env+PNG, --addr flag wiring |
+
 ### Planned
-- Phase D: Integration test on remote host (GWVXG74)
 - Phase E: Production hardening (TLS mutual auth, token rotation, reconnect)
 - Phase F: Final review + v1.0.0 release

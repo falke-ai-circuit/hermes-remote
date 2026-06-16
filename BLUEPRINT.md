@@ -3,7 +3,7 @@
 **Author:** Architect (via Orchestrator)
 **Date:** 2026-06-13
 **Last Updated:** 2026-06-16
-**Status:** ACTIVE — Phase A-C complete, Phase D pending
+**Status:** ACTIVE — Phase A-D complete, Phase E pending
 **Repo:** `github.com/falke-ai-circuit/hermes-remote`
 **Branch:** `main`
 **Tag:** `v0.1.0-a0`
@@ -136,7 +136,7 @@ hermes-remote/
 | **A** | Scaffold — protocol, server, agent, platform, CLI, plugin | ✅ Complete |
 | **B** | Fixes — 8 bugs across 6 files, Go agent connects, all 4 endpoints verified | ✅ Complete |
 | **C** | Plugin — 5 remote_* tools registered, tested | ✅ Complete |
-| **D** | Integration test on remote host (GWVXG74) | ⏳ Pending |
+| **D** | Integration test on remote host (Kali Linux) | ✅ Complete — 7/7 PASS |
 | **E** | Production hardening — TLS mutual auth, token rotation, reconnect | ⏳ Pending |
 | **F** | Final review + v1.0.0 release | ⏳ Pending |
 
@@ -150,7 +150,7 @@ hermes-remote/
 | 4 | Agent connects in interactive mode | `./hermes-remote --connect wss://localhost:7700 --mode interactive` opens CLI | ✅ |
 | 5 | Operative tools work | `remote_agent_list` shows connected agents | ✅ |
 | 6 | Remote shell works | `remote_shell agent="a0-test" command="echo hello"` returns `hello` | ✅ |
-| 7 | Kali Linux test | Binary compiled and deployed, connects from Kali container to server | ⏳ |
+| 7 | Kali Linux test | Binary compiled and deployed, connects from Kali container to server | ✅ — 7/7 endpoints PASS |
 | 8 | Multi-agent | 3 agents connected simultaneously, all visible in registry | ⏳ |
 | 9 | Cross-compile | `make cross` builds for all 5 targets | ✅ |
 | 10 | CI passes | `go build ./... && go vet ./... && go test ./...` | ✅ |
