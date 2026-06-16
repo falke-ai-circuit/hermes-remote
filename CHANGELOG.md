@@ -123,7 +123,7 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 - Zero new external deps (stdlib `log` added for stale-detector logging)
 - Build + vet pass: `go build ./cmd/...` exits 0, `go vet ./...` exits 0, `go test ./...` passes (existing 6/6 rate-limiter tests unaffected)
 
-#### Commit 6: Token Rotation (`TBD`)
+#### Commit 6: Token Rotation (`a66e8df`)
 
 - **Server-side token rotation**: `Server` gains `tokenTTL time.Duration`, `tokenExpiry map[string]time.Time` (guarded by `tokenMu sync.Mutex`), `tokenStop chan struct{}`, and `tokenWG sync.WaitGroup` fields; `NewServer` initializes the map + channel
 - **NEW `InitiateTokenRotation(agentID, newToken) error`** — looks up the agent's WebSocket conn under `mu.RLock`, marshals a `TokenRotateParams{NewToken, Expiry}` envelope, and sends `TypeTokenRotate` to the agent. Returns an error if the agent is not connected. Used by the proactive rotation goroutine and by the agent-initiated refresh handler
@@ -146,6 +146,24 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 - **`Config` gains `TokenFile string`** field; `Agent` gains `tokenExpiry time.Time` field (guarded by `mu`)
 - Zero new external deps (stdlib `crypto/rand`, `encoding/hex`, `os` only). Build + vet + tests pass: `go build ./cmd/...` exits 0, `go vet ./...` exits 0, `go test ./...` passes, cross-compile (darwin/linux/windows × amd64/arm64) exits 0
 - Backward compatible: existing `TypeTokenRotate` and `TokenRotateParams.NewToken` unchanged (only added optional `Expiry` field)
+
+#### Commit 7: TLS Mutual Authentication (`201c77d`) — FINAL PHASE E COMMIT
+
+- **TLS mutual authentication (mTLS)** — the server can now require + verify client certificates, and the agent can present a client cert when dialing a `wss://` server. Zero new external deps (`crypto/tls`, `crypto/x509` are stdlib)
+- **`protocol/websocket.go` — `Dial()` enhancement**: signature gains `clientCertFile`, `clientKeyFile` params → `Dial(rawURL, certPath, clientCertFile, clientKeyFile, token)`. When both are non-empty, loads them via `tls.LoadX509KeyPair` into `TLSClientConfig.Certificates` for mTLS. Existing CA cert loading for server verification (`RootCAs`) unchanged; `InsecureSkipVerify` fallback for `wss://` without a CA cert unchanged
+- **`protocol/websocket.go` — `Listen()` enhancement**: signature gains `clientCAFile` param → `Listen(addr, certFile, keyFile, clientCAFile)`. When `clientCAFile != ""`, reads the CA PEM, loads it into an `x509.CertPool`, and sets `tls.Config.ClientAuth = tls.RequireAndVerifyClientCert` + `tls.Config.ClientCAs = caCertPool`. Server rejects any client that does not present a valid cert signed by that CA
+- **`protocol/server.go` — `Server` wrapper changes**: struct gains `clientCAFile string` field; `NewServer(addr, certFile, keyFile, clientCAFile)` passes it to `Listen`; `ListenAndServe()` now serves plain HTTP when no cert/key configured, TLS (with mTLS if clientCA set) otherwise
+- **Removed dead `GenerateSelfSignedCert`** (`protocol/server.go`) — hardcoded PEM cert block that was never called anywhere in the codebase; also dropped the now-unused `os` import
+- **`internal/server/server.go`**:
+  - `Server` struct gains `certFile`, `keyFile`, `clientCAFile string` fields (stored TLS config)
+  - **NEW `NewServerWithTLS(addr, token, registry, certFile, keyFile, clientCAFile)`** constructor — stores the TLS paths for `StartTLS`
+  - **NEW `NewServerWithTLSRateLimit(... + RateLimitConfig)`** convenience constructor — TLS + rate limiting in one call
+  - **`StartTLS(certFile, keyFile)`** now builds a `tls.Config` with `MinVersion: tls.VersionTLS13`; when `clientCAFile != ""` loads the CA pool and sets `ClientAuth = RequireAndVerifyClientCert` + `ClientCAs`. Honors the server's stored `certFile`/`keyFile` (override params may be empty). Logs `starting TLS+mTLS` vs `starting TLS` accordingly
+- **`internal/agent/agent.go`**: `Config` gains `ClientCertFile`, `ClientKeyFile string` fields (client cert for mTLS on outbound `wss://`); `runOutbound()` passes them to `protocol.Dial()`
+- **`cmd/server/main.go`** — NEW flags: `--cert-file` (PEM, enables TLS with `--key-file`), `--key-file` (PEM), `--client-ca` (PEM, enables mTLS, requires cert+key). When cert+key provided: uses `NewServerWithTLSRateLimit` + `StartTLS`; else `NewServerWithRateLimit` + `Start` (unchanged behavior). Startup log distinguishes TLS / TLS+mTLS / plain
+- **`cmd/hermes-remote/main.go`** — NEW flags: `--client-cert` (PEM, mTLS outbound), `--client-key` (PEM, mTLS outbound), `--cert` (CA cert for server verification on outbound), `--cert-file`/`--key-file` (inbound server TLS cert/key). Wired into `agent.Config`
+- **Backward compatible**: `Dial`/`Listen`/`NewServer` signature changes are internal (callers updated in the same commit). `StartTLS` still accepts `certFile, keyFile` (now optional overrides). No existing flag removed
+- Build + vet + tests pass: `go build ./cmd/...` exits 0, `go vet ./...` exits 0, `go test ./...` passes (6/6 rate-limiter tests). Cross-compile clean for all 6 targets (linux/darwin/windows × amd64/arm64)
 
 ### Phase D — Kali Integration Test (2026-06-16)
 
@@ -177,7 +195,7 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 | 3 | `--addr :7705` ignored, server always on `localhost:7700` | `main.go` only read env var, no flag parsing | Added `flag.String` for `--addr`, `--token`, `--registry` with env fallback |
 | 4 | Screenshot produced PostScript, not PNG | `import` defaults to PS when piping to stdout | Changed to `png:-` format specifier |
 
-### Commits (11 total)
+### Commits (12 total)
 
 | # | Commit | Description |
 |---|--------|-------------|
@@ -191,8 +209,8 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 | 8 | `438ebc7` | feat: Phase E Commit 3 — macOS real implementation (25 functions via native CLI tools) |
 | 9 | `947c306` | feat: Phase E Commit 4 — per-agent token-bucket rate limiter + CLI flags (--rate-limit/--rate-burst/--max-concurrent) |
 | 10 | `4b89328` | feat: Phase E Commit 5 — health monitoring (AgentRecord extensions, stale detector, RecordError/UpdateHealth/GetHealth, /api/agent/{id}/health, enhanced /health) |
-| 11 | `TBD` | feat: Phase E Commit 6 — token rotation (InitiateTokenRotation, proactive rotation goroutine, TokenRotateResult, agent token persistence + proactive refresh, --token-ttl, --token-file) |
+| 11 | `a66e8df` | feat: Phase E Commit 6 — token rotation (InitiateTokenRotation, proactive rotation goroutine, TokenRotateResult, agent token persistence + proactive refresh, --token-ttl, --token-file) |
+| 12 | `201c77d` | feat: Phase E Commit 7 — TLS mutual authentication (mTLS): client cert loading in Dial, client CA verification in Listen, NewServerWithTLS, StartTLS mTLS, --cert-file/--key-file/--client-ca (server), --client-cert/--client-key (agent); removed dead GenerateSelfSignedCert |
 
 ### Planned
-- Phase E: Production hardening (TLS mutual auth, token rotation, Windows/macOS real implementations, rate limiting, health monitoring)
 - Phase F: Final review + v1.0.0 release

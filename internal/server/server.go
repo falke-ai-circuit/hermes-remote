@@ -51,7 +51,8 @@ type Server struct {
 
 	tokenTTL    time.Duration                 // configured token TTL (0 = rotation disabled)
 	tokenExpiry map[string]time.Time          // agentID -> token expiry time
-	tokenMu     sync.Mutex                    // guards tokenExpiry
+	tokenMu       sync.Mutex                   // guards tokenExpiry + rotatedTokens
+	rotatedTokens map[string]string            // agentID -> last rotated token
 	tokenStop   chan struct{}                 // closes to stop rotation goroutine
 	tokenWG     sync.WaitGroup                // waits for rotation goroutine on shutdown
 }
@@ -70,7 +71,8 @@ func NewServer(addr string, token string, registryPath string) *Server {
 		sessions:    NewSessionManager(),
 		proxy:       NewLLMProxy(),
 		conns:       make(map[string]*websocket.Conn),
-		tokenExpiry: make(map[string]time.Time),
+		tokenExpiry:   make(map[string]time.Time),
+		rotatedTokens: make(map[string]string),
 		tokenStop:   make(chan struct{}),
 	}
 }
@@ -289,10 +291,22 @@ func (s *Server) Close() error {
 
 // handleWebSocket upgrades HTTP to WebSocket, authenticates, and processes agent connections.
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	// Auth check
+	// Auth check — accept global token OR per-agent rotated token
 	authHeader := r.Header.Get("Authorization")
 	if s.token != "" {
-		if authHeader != "Bearer "+s.token {
+		valid := authHeader == "Bearer "+s.token
+		if !valid {
+			// Check rotated tokens
+			s.tokenMu.Lock()
+			for _, rt := range s.rotatedTokens {
+				if authHeader == "Bearer "+rt {
+					valid = true
+					break
+				}
+			}
+			s.tokenMu.Unlock()
+		}
+		if !valid {
 			log.Printf("[server] auth rejected from %s", r.RemoteAddr)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -460,6 +474,11 @@ func (s *Server) InitiateTokenRotation(agentID string, newToken string) error {
 	if err := conn.WriteJSON(env); err != nil {
 		return fmt.Errorf("send token_rotate: %w", err)
 	}
+	// Store rotated token so server accepts it on reconnect
+	s.tokenMu.Lock()
+	s.rotatedTokens[agentID] = newToken
+	s.tokenMu.Unlock()
+	log.Printf("[server] rotated token stored for agent %s", agentID)
 	return nil
 }
 

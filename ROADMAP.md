@@ -8,7 +8,7 @@
 | **B** | Parallel Coding | 4 coder subagents | Protocol, Agent, Server, Plugin | ✅ Complete |
 | **C** | Review + Compile + Fixes | Reviewer + Orchestrator | 8 bugs fixed, binary compiles, all 4 endpoints verified | ✅ Complete |
 | **D** | Integration Test | Operative (Kali Linux) | Agent connects from Kali → server, all 7 endpoints work | ✅ Complete |
-| **E** | Production Hardening | Coder + Reviewer | TLS mutual auth, token rotation, reconnect, Windows/macOS stubs | ⏳ Pending |
+| **E** | Production Hardening | Coder + Reviewer | TLS mutual auth, token rotation, reconnect, Windows/macOS real implementations, rate limiting, health monitoring | ✅ Complete |
 | **F** | Final Review + Release | Reviewer + Orchestrator | Full test suite, v1.0.0 tag, GitHub release | ⏳ Pending |
 
 ---
@@ -80,7 +80,7 @@
 
 **10/10 PASS.** 3 bugs found and fixed during testing (screenshot env, process-list route, --addr flag).
 
-## Phase E — Production Hardening ⏳ (Commit 6/6 complete)
+## Phase E — Production Hardening ✅ (Commit 7/7 complete — ALL DONE)
 
 ### E1: Reconnect Hardening ✅ (`a0a20fd`)
 - Exponential backoff + jitter in `runOutbound()` (replaces fixed 5s)
@@ -140,8 +140,18 @@
 - **CLI flags**: `--token-ttl` (server, default 24h, 0=disabled), `--token-file` (agent, default `.hermes-remote-token`)
 - Zero new deps (stdlib `crypto/rand`, `encoding/hex`, `os`). Build + vet + tests + cross-compile pass
 
-### E7: Remaining
-- TLS mutual authentication (client certs)
+### E7: TLS Mutual Authentication ✅ (`201c77d`) — FINAL PHASE E COMMIT
+
+- **TLS mutual authentication (mTLS)** — server requires + verifies client certs; agent presents a client cert when dialing `wss://`. Zero new external deps (`crypto/tls`, `crypto/x509` are stdlib)
+- **`protocol/websocket.go` — `Dial()`**: signature gains `clientCertFile`, `clientKeyFile` → loads via `tls.LoadX509KeyPair` into `TLSClientConfig.Certificates` for mTLS. Existing server-cert CA verification (`RootCAs`) unchanged
+- **`protocol/websocket.go` — `Listen()`**: signature gains `clientCAFile` → when non-empty, loads CA into `x509.CertPool`, sets `ClientAuth = RequireAndVerifyClientCert` + `ClientCAs`; rejects clients without a valid cert
+- **`protocol/server.go`**: `Server` gains `clientCAFile` field; `NewServer(addr, certFile, keyFile, clientCAFile)`; `ListenAndServe()` serves plain HTTP when no cert/key, TLS (+mTLS if clientCA) otherwise
+- **Removed dead `GenerateSelfSignedCert`** (hardcoded PEM, never called); dropped unused `os` import
+- **`internal/server/server.go`**: `Server` gains `certFile`/`keyFile`/`clientCAFile` fields; **NEW `NewServerWithTLS(addr, token, registry, certFile, keyFile, clientCAFile)`**; **NEW `NewServerWithTLSRateLimit(... + RateLimitConfig)`**; `StartTLS()` builds `tls.Config` with `RequireAndVerifyClientCert` + `ClientCAs` when `clientCAFile` set (logs `TLS+mTLS` vs `TLS`)
+- **`internal/agent/agent.go`**: `Config` gains `ClientCertFile`, `ClientKeyFile` fields; `runOutbound()` passes them to `protocol.Dial()`
+- **CLI flags**: server gains `--cert-file`, `--key-file`, `--client-ca` (TLS+mTLS when all three provided); agent gains `--client-cert`, `--client-key` (mTLS outbound) + `--cert` (CA verification), `--cert-file`/`--key-file` (inbound server certs)
+- **Backward compatible**: `StartTLS` still accepts `certFile, keyFile` (now optional overrides). No flags removed. When no cert/key provided, server + agent behave exactly as before (plain HTTP)
+- Build + vet + tests pass (`go build ./cmd/...`, `go vet ./...`, `go test ./...` 6/6). Cross-compile clean for all 6 targets (linux/darwin/windows × amd64/arm64)
 
 ## Phase F — Final Review + Release ⏳
 
@@ -163,7 +173,7 @@
 | B | 1-2 turns (parallel) | ✅ Complete |
 | C | 1 turn | ✅ Complete |
 | D | 1 turn | ✅ Complete — Kali Linux (100.78.148.26) |
-| E | 1-2 turns | ⏳ In Progress — Commit 5/5 complete (reconnect hardening + Windows real + macOS real + rate limiting + health monitoring) |
+| E | 1-2 turns | ✅ Complete — Commit 7/7 (reconnect + Windows + macOS + rate limiting + health monitoring + token rotation + TLS mutual auth) |
 | F | 1 turn | ⏳ Pending |
 
 **v0.1.0-a0 delivered: 3 commits, 2 binaries, 5 remote tools, 8 bugs fixed. Ready for Phase D integration test.**

@@ -3,7 +3,7 @@
 **Author:** Architect (via Orchestrator)
 **Date:** 2026-06-13
 **Last Updated:** 2026-06-16
-**Status:** ACTIVE — Phase A-D complete, Phase E in progress (Commit 6/7: reconnect + Windows + macOS + rate limiting + health monitoring + token rotation)
+**Status:** ACTIVE — Phase A-D complete, Phase E COMPLETE (Commit 7/7: reconnect + Windows + macOS + rate limiting + health monitoring + token rotation + TLS mutual auth). Phase F pending.
 **Repo:** `github.com/falke-ai-circuit/hermes-remote`
 **Branch:** `main`
 **Tag:** `v0.1.0-a0`
@@ -139,7 +139,7 @@ hermes-remote/
 | **B** | Fixes — 8 bugs across 6 files, Go agent connects, all 4 endpoints verified | ✅ Complete |
 | **C** | Plugin — 5 remote_* tools registered, tested | ✅ Complete |
 | **D** | Integration test on remote host (Kali Linux) | ✅ Complete — 7/7 PASS |
-| **E** | Production hardening — TLS mutual auth, token rotation, reconnect, rate limiting, health monitoring | ⏳ In Progress — Commit 6/7 (reconnect + Windows + macOS + rate limiting + health monitoring + token rotation. TLS mutual auth remaining) |
+| **E** | Production hardening — TLS mutual auth, token rotation, reconnect, rate limiting, health monitoring | ✅ Complete — Commit 7/7 (reconnect + Windows + macOS + rate limiting + health monitoring + token rotation + TLS mutual auth) |
 | **F** | Final review + v1.0.0 release | ⏳ Pending |
 
 ## 10. Success Criteria

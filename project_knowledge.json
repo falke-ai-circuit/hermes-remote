@@ -1,7 +1,7 @@
 {
   "project": "hermes-remote",
   "version": "v0.1.0-a0",
-  "last_updated": "2026-06-16T23:30:00Z",
+  "last_updated": "2026-06-16T23:50:00Z",
   "hot_cache": [
     {
       "key": "module_path",
@@ -85,8 +85,13 @@
     },
     {
       "key": "phase_e_status",
-      "value": "in_progress",
-      "note": "Commit 6/7 complete: reconnect hardening + Windows real + macOS real + rate limiting + health monitoring + token rotation. Remaining: TLS mutual auth (Commit 7)."
+      "value": "complete",
+      "note": "ALL 7 commits complete: reconnect hardening + Windows real + macOS real + rate limiting + health monitoring + token rotation + TLS mutual auth (Commit 7). Phase E DONE. Phase F pending."
+    },
+    {
+      "key": "tls_mutual_auth",
+      "value": "client cert in Dial + client CA in Listen",
+      "note": "Phase E Commit 7: TLS mutual authentication (mTLS). protocol.Dial signature is now Dial(rawURL, certPath, clientCertFile, clientKeyFile, token) — when clientCertFile+clientKeyFile non-empty, loads via tls.LoadX509KeyPair into TLSClientConfig.Certificates. protocol.Listen signature is now Listen(addr, certFile, keyFile, clientCAFile) — when clientCAFile non-empty, loads CA into x509.CertPool, sets ClientAuth=tls.RequireAndVerifyClientCert + ClientCAs. protocol.NewServer signature is now NewServer(addr, certFile, keyFile, clientCAFile). internal/server: Server gains certFile/keyFile/clientCAFile fields; NEW NewServerWithTLS(addr,token,registry,certFile,keyFile,clientCAFile) + NewServerWithTLSRateLimit(...+RateLimitConfig); StartTLS builds tls.Config with RequireAndVerifyClientCert+ClientCAs when clientCAFile set (logs 'TLS+mTLS' vs 'TLS'). agent.Config gains ClientCertFile/ClientKeyFile; runOutbound passes them to Dial. CLI: server --cert-file/--key-file/--client-ca; agent --client-cert/--client-key/--cert/--cert-file/--key-file. Removed dead GenerateSelfSignedCert (hardcoded PEM, never called). Zero new deps (crypto/tls, crypto/x509 stdlib). Build+vet+tests pass; cross-compile clean for all 6 targets."
     },
     {
       "key": "rate_limiting",
@@ -114,13 +119,13 @@
       "purpose": "Agent binary — CLI entry point",
       "depends_on": ["internal/agent", "internal/protocol", "internal/platform"],
       "key_files": ["main.go"],
-      "flags": ["--connect", "--listen", "--mode", "--token", "--name", "--max-retries", "--backoff-min", "--backoff-max"]
+      "flags": ["--connect", "--listen", "--mode", "--token", "--name", "--max-retries", "--backoff-min", "--backoff-max", "--token-file", "--cert", "--client-cert", "--client-key", "--cert-file", "--key-file"]
     },
     "cmd/server": {
       "purpose": "Server binary — WebSocket server + LLM proxy",
       "depends_on": ["internal/server", "internal/protocol"],
       "key_files": ["main.go"],
-      "flags": ["--addr", "--token", "--registry", "--rate-limit", "--rate-burst", "--max-concurrent"]
+      "flags": ["--addr", "--token", "--registry", "--rate-limit", "--rate-burst", "--max-concurrent", "--token-ttl", "--cert-file", "--key-file", "--client-ca"]
     },
     "internal/protocol": {
       "purpose": "WebSocket protocol, message types, TLS",
@@ -235,9 +240,53 @@
       "rule": "Stale-detector goroutine is started in NewServer and must be stopped via Registry.Stop()",
       "detail": "Phase E Commit 5 adds a background goroutine in Registry.runStaleDetector() that scans every 30s (staleCheckInterval) for agents with LastHeartbeat > 90s old (staleThreshold) and marks them 'stale'. It is started automatically by NewServer via reg.StartStaleDetector(). To avoid a goroutine leak, Server.Close() calls s.registry.Stop() which closes stopCh (idempotent via sync.Once). Any code that constructs a Registry directly (outside NewServer) and wants stale detection must call StartStaleDetector() explicitly; Stop() is safe to call even if StartStaleDetector was never called.",
       "affected": ["internal/server/registry.go", "internal/server/server.go"]
+    },
+    {
+      "id": "HR-015",
+      "rule": "protocol.Dial/Listen/NewServer signatures changed in Phase E Commit 7 (mTLS)",
+      "detail": "Phase E Commit 7 added TLS mutual authentication. The signatures are now: protocol.Dial(rawURL, certPath, clientCertFile, clientKeyFile, token) — the two new params (clientCertFile, clientKeyFile) sit BETWEEN certPath and token. protocol.Listen(addr, certFile, keyFile, clientCAFile) — new trailing param. protocol.NewServer(addr, certFile, keyFile, clientCAFile) — new trailing param. Any caller using the old 3-arg Dial, 3-arg Listen, or 3-arg NewServer will fail to compile with 'not enough arguments'. The only callers in-tree (agent.runOutbound, agent.runInbound) were updated in the same commit. Server.StartTLS(certFile, keyFile) signature is UNCHANGED (the params are now optional overrides of the stored certFile/keyFile; pass empty strings to use the stored values from NewServerWithTLS). For mTLS the server uses NewServerWithTLS(addr, token, registry, certFile, keyFile, clientCAFile) + StartTLS(\"\",\"\"). When no cert/key is provided the server and agent behave exactly as before (plain HTTP / wss with InsecureSkipVerify).",
+      "affected": ["internal/protocol/websocket.go", "internal/protocol/server.go", "internal/agent/agent.go", "internal/server/server.go"]
+    },
+    {
+      "id": "HR-016",
+      "rule": "GenerateSelfSignedCert was removed in Phase E Commit 7 (dead code)",
+      "detail": "protocol.GenerateSelfSignedCert (a function containing a hardcoded PEM certificate block and a redacted private key placeholder) was removed in Phase E Commit 7. It was never called anywhere in the codebase and the hardcoded PEM was not a valid usable certificate. Do not re-add it; use a real CA-signed cert or generate one with `openssl req -x509` / `cfssl` for testing. The protocol/server.go file no longer imports 'os' (the only user of os was the removed function).",
+      "affected": ["internal/protocol/server.go"]
     }
   ],
   "recent_changes": [
+    {
+      "version": "v0.1.0-a0",
+      "date": "2026-06-16",
+      "summary": "Phase E Commit 7 (FINAL): TLS Mutual Authentication (mTLS). protocol.Dial signature now Dial(rawURL, certPath, clientCertFile, clientKeyFile, token) — loads client cert via tls.LoadX509KeyPair into TLSClientConfig.Certificates for mTLS. protocol.Listen signature now Listen(addr, certFile, keyFile, clientCAFile) — when clientCAFile non-empty, loads CA into x509.CertPool, sets ClientAuth=RequireAndVerifyClientCert + ClientCAs. protocol.NewServer signature now NewServer(addr, certFile, keyFile, clientCAFile); ListenAndServe serves plain HTTP when no cert/key, TLS+mTLS otherwise. Removed dead GenerateSelfSignedCert (hardcoded PEM, never called). internal/server: Server gains certFile/keyFile/clientCAFile fields; NEW NewServerWithTLS(addr,token,registry,certFile,keyFile,clientCAFile) + NewServerWithTLSRateLimit(...+RateLimitConfig); StartTLS builds tls.Config with RequireAndVerifyClientCert+ClientCAs when clientCAFile set (logs TLS+mTLS vs TLS). agent.Config gains ClientCertFile/ClientKeyFile; runOutbound passes to Dial. CLI: server --cert-file/--key-file/--client-ca (TLS+mTLS when all provided); agent --client-cert/--client-key (mTLS outbound) + --cert (CA verify) + --cert-file/--key-file (inbound certs). Backward compatible (StartTLS params now optional overrides; no flags removed; plain HTTP when no cert). Zero new deps (crypto/tls, crypto/x509 stdlib). Build+vet+tests pass (6/6); cross-compile clean all 6 targets. Added gotchas HR-015, HR-016.",
+      "files": [
+        "internal/protocol/websocket.go",
+        "internal/protocol/server.go",
+        "internal/server/server.go",
+        "internal/agent/agent.go",
+        "cmd/server/main.go",
+        "cmd/hermes-remote/main.go",
+        "CHANGELOG.md",
+        "ROADMAP.md",
+        "project_knowledge.json",
+        "BLUEPRINT.md"
+      ]
+    },
+    {
+      "version": "v0.1.0-a0",
+      "date": "2026-06-16",
+      "summary": "Phase E Commit 6: Token Rotation — server-side token rotation (Server gains tokenTTL, tokenExpiry map, tokenStop channel, tokenWG). NEW InitiateTokenRotation(agentID, newToken) sends TypeTokenRotate with TokenRotateParams{NewToken, Expiry}. NEW proactive rotation goroutine (runTokenRotation) scans every 60s, rotates within 5min of expiry. NEW SetTokenTTL/SetTokenExpiry/ClearTokenExpiry + generateToken() (crypto/rand→hex). NEW TypeTokenRefresh message (agent→server proactive refresh). TokenRotateParams gains optional Expiry; NEW TokenRotateResult{Rotated,NewToken}. Agent handleTokenRotate updates cfg.Token+tokenExpiry, persists to TokenFile (0600). Agent proactive refresh ticker (60s). NEW LoadPersistedToken(path). CLI: --token-ttl (server, 24h), --token-file (agent). Zero new deps. Build+vet+tests+cross-compile pass.",
+      "files": [
+        "internal/server/server.go",
+        "internal/protocol/messages.go",
+        "internal/agent/agent.go",
+        "cmd/server/main.go",
+        "cmd/hermes-remote/main.go",
+        "CHANGELOG.md",
+        "ROADMAP.md",
+        "BLUEPRINT.md"
+      ]
+    },
     {
       "version": "v0.1.0-a0",
       "date": "2026-06-16",
