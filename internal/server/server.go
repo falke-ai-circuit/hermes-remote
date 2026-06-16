@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/falke-ai-circuit/hermes-remote/internal/protocol"
@@ -251,7 +250,6 @@ func (s *Server) handleAgentShell(w http.ResponseWriter, r *http.Request, agentI
 	start := time.Now()
 
 	cmd := exec.Command("sh", "-c", params.Command)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if params.WorkDir != "" {
 		cmd.Dir = params.WorkDir
 	}
@@ -282,7 +280,7 @@ func (s *Server) handleAgentShell(w http.ResponseWriter, r *http.Request, agentI
 		output = res.output
 		cmdErr = res.err
 	case <-time.After(time.Duration(params.Timeout) * time.Second):
-		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		cmd.Process.Kill()
 		<-done // wait for goroutine to finish after killing
 		timedOut = true
 	}
