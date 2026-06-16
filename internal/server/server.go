@@ -159,26 +159,34 @@ func (s *Server) runTokenRotation() {
 			return
 		case <-ticker.C:
 			now := time.Now()
+			// Snapshot agents needing rotation under lock, then rotate without holding lock
+			type rotateTask struct {
+				agentID   string
+				newToken  string
+			}
+			var tasks []rotateTask
 			s.tokenMu.Lock()
 			for agentID, expiry := range s.tokenExpiry {
-				// Rotate when within rotationLeadTime of expiry (or already past).
 				if !expiry.IsZero() && now.Add(rotationLeadTime).After(expiry) {
-					newToken := generateToken()
-					if err := s.InitiateTokenRotation(agentID, newToken); err != nil {
-						log.Printf("[server] token rotation failed for agent %s: %v", agentID, err)
-						continue
-					}
-					// Schedule next expiry relative to now.
+					tasks = append(tasks, rotateTask{agentID: agentID, newToken: generateToken()})
+					// Schedule next expiry relative to now
 					s.tokenExpiry[agentID] = now.Add(s.tokenTTL)
-					log.Printf("[server] proactively rotated token for agent %s (next expiry in %v)", agentID, s.tokenTTL)
 				}
 			}
 			s.tokenMu.Unlock()
-		}
-	}
-}
+			// Rotate without holding tokenMu (InitiateTokenRotation locks it internally)
+			for _, t := range tasks {
+				if err := s.InitiateTokenRotation(t.agentID, t.newToken); err != nil {
+					log.Printf("[server] token rotation failed for agent %s: %v", t.agentID, err)
+				} else {
+					log.Printf("[server] proactively rotated token for agent %s (next expiry in %v)", t.agentID, s.tokenTTL)
+				}
+			}
+			}
+			}
+			}
 
-// SetTokenExpiry records the expiry time for an agent's token. Called when an
+			// SetTokenExpiry records the expiry time for an agent's token. Called when an
 // agent connects (the server issues a TTL-based expiry) or after a manual
 // rotation. A zero expiry means "no expiry tracking".
 func (s *Server) SetTokenExpiry(agentID string, expiry time.Time) {
