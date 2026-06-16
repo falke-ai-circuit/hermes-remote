@@ -3,7 +3,7 @@
 **Author:** Architect (via Orchestrator)
 **Date:** 2026-06-13
 **Last Updated:** 2026-06-16
-**Status:** ACTIVE — Phase A-D complete, Phase E in progress (Commit 1/4: reconnect hardening)
+**Status:** ACTIVE — Phase A-D complete, Phase E in progress (Commit 2/4: reconnect hardening + Windows real impl)
 **Repo:** `github.com/falke-ai-circuit/hermes-remote`
 **Branch:** `main`
 **Tag:** `v0.1.0-a0`
@@ -100,7 +100,8 @@ hermes-remote/
 │   │   └── agent.go             # Agent loop + command dispatch
 │   └── platform/
 │       ├── platform.go          # Platform interface
-│       └── platform_linux.go    # Linux implementation
+│       ├── platform_linux.go    # Linux implementation (bash, xdotool, import/scrot, xclip)
+│       └── platform_windows.go  # Windows implementation (PowerShell: System.Drawing, SendKeys, user32.dll)
 ├── tool/
 │   ├── plugin.py                # Hermes plugin registration
 │   └── plugin.yaml              # Plugin manifest
@@ -137,7 +138,7 @@ hermes-remote/
 | **B** | Fixes — 8 bugs across 6 files, Go agent connects, all 4 endpoints verified | ✅ Complete |
 | **C** | Plugin — 5 remote_* tools registered, tested | ✅ Complete |
 | **D** | Integration test on remote host (Kali Linux) | ✅ Complete — 7/7 PASS |
-| **E** | Production hardening — TLS mutual auth, token rotation, reconnect | ⏳ In Progress — Commit 1/4 (reconnect hardening) |
+| **E** | Production hardening — TLS mutual auth, token rotation, reconnect | ⏳ In Progress — Commit 2/4 (reconnect hardening + Windows real impl) |
 | **F** | Final review + v1.0.0 release | ⏳ Pending |
 
 ## 10. Success Criteria

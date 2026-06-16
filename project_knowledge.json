@@ -1,7 +1,7 @@
 {
   "project": "hermes-remote",
   "version": "v0.1.0-a0",
-  "last_updated": "2026-06-16T19:00:00Z",
+  "last_updated": "2026-06-16T20:00:00Z",
   "hot_cache": [
     {
       "key": "module_path",
@@ -86,7 +86,12 @@
     {
       "key": "phase_e_status",
       "value": "in_progress",
-      "note": "Commit 1/4 complete: reconnect hardening (a0a20fd). Remaining: TLS mutual auth, token rotation, Windows/macOS real implementations."
+      "note": "Commit 2/4 complete: reconnect hardening (a0a20fd) + Windows real PowerShell implementations (d16dff3). Remaining: TLS mutual auth, token rotation, macOS real implementation."
+    },
+    {
+      "key": "windows_platform_status",
+      "value": "real",
+      "note": "Phase E Commit 2: 6 stubs replaced with PowerShell-based real implementations. Screenshot (System.Drawing→PNG), ScreenInfo (AllScreens), Click (Cursor+user32.dll), TypeText/KeyPress/Hotkey (SendKeys), Notify (msg.exe+ToastNotificationManager). ScreenStreamStart/Stop remain stubs. Zero new deps. Cross-compile passes."
     }
   ],
   "architecture": {
@@ -119,10 +124,10 @@
       "key_files": ["agent.go"]
     },
     "internal/platform": {
-      "purpose": "Platform interface + Linux implementation",
+      "purpose": "Platform interface + Linux/Windows implementations",
       "depends_on": [],
-      "key_files": ["platform.go", "platform_linux.go"],
-      "tools": ["bash", "xdotool", "import/scrot", "xclip"]
+      "key_files": ["platform.go", "platform_linux.go", "platform_windows.go"],
+      "tools": ["bash", "xdotool", "import/scrot", "xclip (Linux)", "PowerShell System.Drawing/Forms/user32.dll (Windows)"]
     },
     "tool": {
       "purpose": "Hermes plugin registering 5 remote tools for operative profile",
@@ -188,6 +193,18 @@
     }
   ],
   "recent_changes": [
+    {
+      "version": "v0.1.0-a0",
+      "date": "2026-06-16",
+      "summary": "Phase E Commit 2: Windows Real Implementation — replaced 6 stubs in platform_windows.go with PowerShell-based real implementations. Screenshot (System.Drawing→PNG), ScreenInfo (AllScreens parsing), Click (Cursor+user32.dll), TypeText/KeyPress/Hotkey (SendKeys), Notify (msg.exe+ToastNotificationManager). ScreenStreamStart/Stop kept as stubs. Added strconv/strings imports. Zero new deps. Cross-compile and vet pass cleanly.",
+      "files": [
+        "internal/platform/platform_windows.go",
+        "CHANGELOG.md",
+        "ROADMAP.md",
+        "project_knowledge.json",
+        "BLUEPRINT.md"
+      ]
+    },
     {
       "version": "v0.1.0-a0",
       "date": "2026-06-16",

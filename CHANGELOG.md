@@ -50,6 +50,22 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 - Zero new external deps (`math/rand/v2` is stdlib in Go 1.22)
 - Build and vet pass cleanly
 
+#### Commit 2: Windows Real Implementation (`d16dff3`)
+
+- Replaced 6 stub functions in `platform_windows.go` with PowerShell-based real implementations
+- **Screenshot**: PowerShell `System.Drawing` → PNG bytes via stdout, base64-encoded
+- **ScreenInfo**: PowerShell `System.Windows.Forms.Screen::AllScreens` → parsed display list
+- **Click**: PowerShell `Cursor::Position` + `user32.dll mouse_event` P/Invoke
+- **TypeText**: PowerShell `SendKeys::SendWait(text)`
+- **KeyPress**: PowerShell `SendKeys::SendWait({key})`
+- **Hotkey**: PowerShell `SendKeys::SendWait(modifier+key)` with ctrl/alt/shift/win mapping
+- **Notify**: `msg.exe` fallback → PowerShell `ToastNotificationManager` toast
+- **ScreenStreamStart/Stop**: kept as stubs (deferred to Phase F)
+- Added imports: `strconv`, `strings`
+- Zero new external deps (PowerShell is built into Windows)
+- Cross-compile: `GOOS=windows GOARCH=amd64 go build ./cmd/...` exits 0
+- `go vet ./...` exits 0
+
 ### Phase D — Kali Integration Test (2026-06-16)
 
 | Test | Result |
@@ -80,7 +96,7 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 | 3 | `--addr :7705` ignored, server always on `localhost:7700` | `main.go` only read env var, no flag parsing | Added `flag.String` for `--addr`, `--token`, `--registry` with env fallback |
 | 4 | Screenshot produced PostScript, not PNG | `import` defaults to PS when piping to stdout | Changed to `png:-` format specifier |
 
-### Commits (6 total)
+### Commits (7 total)
 
 | # | Commit | Description |
 |---|--------|-------------|
@@ -90,6 +106,7 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 | 4 | `c5dde2c` | fix: cross-platform shell + CODER rule #6 + Windows platform stubs |
 | 5 | `b25a852` | fix: Phase D — process-list endpoint, screenshot env+PNG, --addr flag wiring |
 | 6 | `a0a20fd` | feat: Phase E Commit 1 — exponential backoff + jitter reconnect hardening |
+| 7 | `d16dff3` | feat: Phase E Commit 2 — Windows real PowerShell implementations (6 stubs → real) |
 
 ### Planned
 - Phase E: Production hardening (TLS mutual auth, token rotation, Windows/macOS real implementations)
