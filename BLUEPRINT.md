@@ -3,7 +3,7 @@
 **Author:** Architect (via Orchestrator)
 **Date:** 2026-06-13
 **Last Updated:** 2026-06-16
-**Status:** ACTIVE — Phase A-D complete, Phase E in progress (Commit 2/4: reconnect hardening + Windows real impl)
+**Status:** ACTIVE — Phase A-D complete, Phase E in progress (Commit 3/4: reconnect hardening + Windows real + macOS real)
 **Repo:** `github.com/falke-ai-circuit/hermes-remote`
 **Branch:** `main`
 **Tag:** `v0.1.0-a0`
@@ -64,7 +64,7 @@ The operator agent needs to control remote machines — desktops, laptops, serve
 | Component | Purpose |
 |-----------|---------|
 | **Agent Loop** | Full Hermes agent loop (system prompt → LLM call → tool dispatch → response) |
-| **Platform Adapters** | Linux (native), Windows (stub), macOS (stub) — for platform-specific tools |
+| **Platform Adapters** | Linux (native), Windows (PowerShell), macOS (osascript/screencapture) — for platform-specific tools |
 | **Protocol Client** | WebSocket dial, ping/pong, message serialization |
 
 ## 7. Plugin Integration
@@ -101,7 +101,8 @@ hermes-remote/
 │   └── platform/
 │       ├── platform.go          # Platform interface
 │       ├── platform_linux.go    # Linux implementation (bash, xdotool, import/scrot, xclip)
-│       └── platform_windows.go  # Windows implementation (PowerShell: System.Drawing, SendKeys, user32.dll)
+│       ├── platform_windows.go  # Windows implementation (PowerShell: System.Drawing, SendKeys, user32.dll)
+│       └── platform_darwin.go   # macOS implementation (screencapture, osascript, pbpaste/pbcopy, open, ps)
 ├── tool/
 │   ├── plugin.py                # Hermes plugin registration
 │   └── plugin.yaml              # Plugin manifest
@@ -138,7 +139,7 @@ hermes-remote/
 | **B** | Fixes — 8 bugs across 6 files, Go agent connects, all 4 endpoints verified | ✅ Complete |
 | **C** | Plugin — 5 remote_* tools registered, tested | ✅ Complete |
 | **D** | Integration test on remote host (Kali Linux) | ✅ Complete — 7/7 PASS |
-| **E** | Production hardening — TLS mutual auth, token rotation, reconnect | ⏳ In Progress — Commit 2/4 (reconnect hardening + Windows real impl) |
+| **E** | Production hardening — TLS mutual auth, token rotation, reconnect | ⏳ In Progress — Commit 3/4 (reconnect hardening + Windows real + macOS real) |
 | **F** | Final review + v1.0.0 release | ⏳ Pending |
 
 ## 10. Success Criteria

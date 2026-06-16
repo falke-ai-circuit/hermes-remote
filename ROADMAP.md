@@ -80,7 +80,7 @@
 
 **10/10 PASS.** 3 bugs found and fixed during testing (screenshot env, process-list route, --addr flag).
 
-## Phase E — Production Hardening ⏳ (Commit 2/4 complete)
+## Phase E — Production Hardening ⏳ (Commit 3/4 complete)
 
 ### E1: Reconnect Hardening ✅ (`a0a20fd`)
 - Exponential backoff + jitter in `runOutbound()` (replaces fixed 5s)
@@ -96,10 +96,17 @@
 - Added imports: `strconv`, `strings` — zero new external deps
 - Cross-compile: `GOOS=windows GOARCH=amd64 go build ./cmd/...` exits 0, `go vet ./...` exits 0
 
-### E3-E4: Remaining
+### E3: macOS Real Implementation ✅ (`438ebc7`)
+- **NEW** `internal/platform/platform_darwin.go` — full `darwinPlatform` implementing all 25 Platform interface methods
+- macOS-native CLI tools (zero new external deps): `screencapture`, `osascript`, `pbpaste`/`pbcopy`, `open`, `ps`, `bash`
+- Screenshot (`screencapture -x -t png -`), ScreenInfo (`system_profiler`), Click/TypeText/KeyPress/Hotkey (`osascript` AppleScript), Clipboard (`pbpaste`/`pbcopy`), OpenURL (`open`), Notify (`osascript display notification`), ProcessList (`ps -axo`), ProcessKill (`syscall.Kill`)
+- Added explicit `//go:build linux` build tag to `platform_linux.go` (was missing; filename already constrained it, but the tag makes intent unambiguous)
+- ScreenStreamStart/Stop kept as stubs (deferred to Phase F)
+- Cross-compile passes for darwin/linux/windows; `go vet ./...` passes for all three GOOS
+
+### E4: Remaining
 - TLS mutual authentication (client certs)
 - Token rotation (expiring tokens, refresh flow)
-- macOS platform stub → real implementation
 - Rate limiting on LLM proxy
 - Agent health monitoring + alerting
 
@@ -123,7 +130,7 @@
 | B | 1-2 turns (parallel) | ✅ Complete |
 | C | 1 turn | ✅ Complete |
 | D | 1 turn | ✅ Complete — Kali Linux (100.78.148.26) |
-| E | 1-2 turns | ⏳ In Progress — Commit 2/4 complete (reconnect hardening + Windows real impl) |
+| E | 1-2 turns | ⏳ In Progress — Commit 3/4 complete (reconnect hardening + Windows real + macOS real) |
 | F | 1 turn | ⏳ Pending |
 
 **v0.1.0-a0 delivered: 3 commits, 2 binaries, 5 remote tools, 8 bugs fixed. Ready for Phase D integration test.**

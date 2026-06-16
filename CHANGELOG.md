@@ -66,6 +66,33 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 - Cross-compile: `GOOS=windows GOARCH=amd64 go build ./cmd/...` exits 0
 - `go vet ./...` exits 0
 
+#### Commit 3: macOS Real Implementation (`438ebc7`)
+
+- **NEW** `internal/platform/platform_darwin.go` — full `darwinPlatform` with all 25 Platform interface methods using macOS-native CLI tools (zero new external deps)
+- **Screenshot**: `screencapture -x -t png -` (built-in, PNG to stdout)
+- **ScreenInfo**: `system_profiler SPDisplaysDataType` → parse `Resolution:` lines
+- **Click/TypeText/KeyPress/Hotkey**: `osascript` AppleScript / System Events
+  - `KeyPress` uses a key-code map (return/tab/space/arrows/F1–F12/home/end/pgup/pgdn)
+  - `Hotkey` maps `ctrl`/`alt`/`shift`/`cmd`(win/super/meta) to System Events modifiers
+- **ClipboardGet**: `pbpaste` (built-in)
+- **ClipboardSet**: `pbcopy` via stdin pipe (built-in)
+- **OpenURL**: `open` (built-in)
+- **Notify**: `osascript display notification`
+- **ProcessList**: `ps -axo pid,comm,pcpu,rss` (BSD ps; rss KB → MB)
+- **ProcessKill**: `syscall.Kill(pid, signal)` (same as linux)
+- **Exec**: `bash -c` with timeout via `cmd.Process.Kill()` (cross-platform safe, no `Setpgid`)
+- **Filesystem (7)**: Go stdlib `os` package (cross-platform, same as linux)
+- **Health**: hostname, `runtime.GOOS`/`runtime.GOARCH`, mode
+- **ScreenStreamStart/Stop**: kept as stubs (deferred to Phase F)
+- Added explicit `//go:build linux` build tag to `platform_linux.go` (belt-and-suspenders; the `_linux.go` filename already constrains it, but the explicit tag makes intent unambiguous and matches the windows/darwin files)
+- `splitLines` duplicated in `platform_darwin.go` (no new shared file, per design)
+- Zero new external deps (all macOS built-in CLI tools)
+- Build verification:
+  - `GOOS=darwin  GOARCH=amd64 go build ./cmd/...` exits 0
+  - `GOOS=linux   GOARCH=amd64 go build ./cmd/...` exits 0 (no regression)
+  - `GOOS=windows GOARCH=amd64 go build ./cmd/...` exits 0 (no regression)
+  - `GOOS=darwin/linux/windows go vet ./...` exits 0
+
 ### Phase D — Kali Integration Test (2026-06-16)
 
 | Test | Result |
@@ -96,7 +123,7 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 | 3 | `--addr :7705` ignored, server always on `localhost:7700` | `main.go` only read env var, no flag parsing | Added `flag.String` for `--addr`, `--token`, `--registry` with env fallback |
 | 4 | Screenshot produced PostScript, not PNG | `import` defaults to PS when piping to stdout | Changed to `png:-` format specifier |
 
-### Commits (7 total)
+### Commits (8 total)
 
 | # | Commit | Description |
 |---|--------|-------------|
@@ -107,6 +134,7 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 | 5 | `b25a852` | fix: Phase D — process-list endpoint, screenshot env+PNG, --addr flag wiring |
 | 6 | `a0a20fd` | feat: Phase E Commit 1 — exponential backoff + jitter reconnect hardening |
 | 7 | `d16dff3` | feat: Phase E Commit 2 — Windows real PowerShell implementations (6 stubs → real) |
+| 8 | `438ebc7` | feat: Phase E Commit 3 — macOS real implementation (25 functions via native CLI tools) |
 
 ### Planned
 - Phase E: Production hardening (TLS mutual auth, token rotation, Windows/macOS real implementations)

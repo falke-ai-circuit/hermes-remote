@@ -1,7 +1,7 @@
 {
   "project": "hermes-remote",
   "version": "v0.1.0-a0",
-  "last_updated": "2026-06-16T20:00:00Z",
+  "last_updated": "2026-06-16T21:30:00Z",
   "hot_cache": [
     {
       "key": "module_path",
@@ -86,12 +86,17 @@
     {
       "key": "phase_e_status",
       "value": "in_progress",
-      "note": "Commit 2/4 complete: reconnect hardening (a0a20fd) + Windows real PowerShell implementations (d16dff3). Remaining: TLS mutual auth, token rotation, macOS real implementation."
+      "note": "Commit 3/4 complete: reconnect hardening (a0a20fd) + Windows real PowerShell implementations (d16dff3) + macOS real implementation (438ebc7). Remaining: TLS mutual auth, token rotation, rate limiting, health monitoring."
     },
     {
       "key": "windows_platform_status",
       "value": "real",
       "note": "Phase E Commit 2: 6 stubs replaced with PowerShell-based real implementations. Screenshot (System.Drawing→PNG), ScreenInfo (AllScreens), Click (Cursor+user32.dll), TypeText/KeyPress/Hotkey (SendKeys), Notify (msg.exe+ToastNotificationManager). ScreenStreamStart/Stop remain stubs. Zero new deps. Cross-compile passes."
+    },
+    {
+      "key": "darwin_platform_status",
+      "value": "real",
+      "note": "Phase E Commit 3: NEW platform_darwin.go implements all 25 Platform interface methods via macOS-native CLI tools (zero new deps). Screenshot (screencapture -x -t png -), ScreenInfo (system_profiler SPDisplaysDataType), Click/TypeText/KeyPress/Hotkey (osascript AppleScript + key-code map), Clipboard (pbpaste/pbcopy), OpenURL (open), Notify (osascript display notification), ProcessList (ps -axo pid,comm,pcpu,rss), ProcessKill (syscall.Kill), Exec (bash -c with cmd.Process.Kill timeout). ScreenStreamStart/Stop remain stubs (Phase F). Added explicit //go:build linux tag to platform_linux.go. Cross-compile passes for darwin/linux/windows; go vet passes for all three."
     }
   ],
   "architecture": {
@@ -124,10 +129,10 @@
       "key_files": ["agent.go"]
     },
     "internal/platform": {
-      "purpose": "Platform interface + Linux/Windows implementations",
+      "purpose": "Platform interface + Linux/Windows/macOS implementations",
       "depends_on": [],
-      "key_files": ["platform.go", "platform_linux.go", "platform_windows.go"],
-      "tools": ["bash", "xdotool", "import/scrot", "xclip (Linux)", "PowerShell System.Drawing/Forms/user32.dll (Windows)"]
+      "key_files": ["platform.go", "platform_linux.go", "platform_windows.go", "platform_darwin.go"],
+      "tools": ["bash", "xdotool", "import/scrot", "xclip (Linux)", "PowerShell System.Drawing/Forms/user32.dll (Windows)", "screencapture/osascript/pbpaste/pbcopy/open/ps (macOS)"]
     },
     "tool": {
       "purpose": "Hermes plugin registering 5 remote tools for operative profile",
@@ -190,9 +195,34 @@
       "rule": "import defaults to PostScript when piping to stdout",
       "detail": "ImageMagick's `import -window root -` produces PostScript by default. Use `import -window root png:-` to force PNG output. Fixed in b25a852.",
       "affected": ["internal/server/server.go"]
+    },
+    {
+      "id": "HR-010",
+      "rule": "Platform files are constrained by BOTH filename suffix AND build tag",
+      "detail": "platform_linux.go / platform_windows.go / platform_darwin.go are automatically GOOS-restricted by their _linux/_windows/_darwin filename suffixes. Phase E Commit 3 added explicit //go:build linux tag to platform_linux.go as belt-and-suspenders (the other two already had tags). Each GOOS picks up exactly platform.go + its platform_<os>.go file, which defines the New() factory. Without the correct file for a target GOOS, the agent package fails with 'undefined: platform.New'.",
+      "affected": ["internal/platform/platform_linux.go", "internal/platform/platform_windows.go", "internal/platform/platform_darwin.go"]
+    },
+    {
+      "id": "HR-011",
+      "rule": "macOS ProcessList parses ps -axo from the end (comm contains spaces)",
+      "detail": "macOS `ps -axo pid,comm,pcpu,rss` — the comm column can contain spaces (e.g. '/path to/app'), so platform_darwin.go parses fields from the end: last field is rss (KB→MB), second-to-last is pcpu (float), field[0] is pid, and the middle is the joined name. Do not naively Sscanf the whole line.",
+      "affected": ["internal/platform/platform_darwin.go"]
     }
   ],
   "recent_changes": [
+    {
+      "version": "v0.1.0-a0",
+      "date": "2026-06-16",
+      "summary": "Phase E Commit 3: macOS Real Implementation — NEW platform_darwin.go implements all 25 Platform interface methods via macOS-native CLI tools (zero new deps). Screenshot (screencapture -x -t png -), ScreenInfo (system_profiler), Click/TypeText/KeyPress/Hotkey (osascript AppleScript + key-code map), Clipboard (pbpaste/pbcopy), OpenURL (open), Notify (osascript display notification), ProcessList (ps -axo, parse-from-end for spaces in comm), ProcessKill (syscall.Kill), Exec (bash -c, cmd.Process.Kill timeout). ScreenStreamStart/Stop kept as stubs (Phase F). Added explicit //go:build linux tag to platform_linux.go. Cross-compile + vet pass for darwin/linux/windows. Added gotchas HR-010, HR-011.",
+      "files": [
+        "internal/platform/platform_darwin.go",
+        "internal/platform/platform_linux.go",
+        "CHANGELOG.md",
+        "ROADMAP.md",
+        "project_knowledge.json",
+        "BLUEPRINT.md"
+      ]
+    },
     {
       "version": "v0.1.0-a0",
       "date": "2026-06-16",
