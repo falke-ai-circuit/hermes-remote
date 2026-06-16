@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"net/http"
 	"runtime"
 	"sync"
@@ -23,28 +24,32 @@ const (
 
 // Config holds agent configuration.
 type Config struct {
-	Mode     string // "outbound", "inbound", "dual"
-	URL      string // wss://host:port for outbound
-	Addr     string // :port for inbound
-	Token    string
-	CertPath string // CA cert for outbound
-	CertFile string // TLS cert for inbound
-	KeyFile  string // TLS key for inbound
-	Name     string // optional display name
-	LogPath  string // log file path (empty = stdout)
+	Mode       string // "outbound", "inbound", "dual"
+	URL        string // wss://host:port for outbound
+	Addr       string // :port for inbound
+	Token      string
+	CertPath   string // CA cert for outbound
+	CertFile   string // TLS cert for inbound
+	KeyFile    string // TLS key for inbound
+	Name       string // optional display name
+	LogPath    string // log file path (empty = stdout)
+	MaxRetries int           // 0 = infinite retries
+	BackoffMin time.Duration // default 1s
+	BackoffMax time.Duration // default 60s
 }
 
 // Agent is the remote agent instance.
 type Agent struct {
-	cfg         Config
-	conn        *websocket.Conn
-	connectedAt time.Time
-	mu          sync.Mutex
-	lastPing    time.Time
-	pingMisses  int
-	plat        platform.Platform
-	server      *protocol.Server
-	stopped     chan struct{}
+	cfg            Config
+	conn           *websocket.Conn
+	connectedAt    time.Time
+	mu             sync.Mutex
+	lastPing       time.Time
+	pingMisses     int
+	backoffAttempt int
+	plat           platform.Platform
+	server         *protocol.Server
+	stopped        chan struct{}
 }
 
 // New creates a new agent.
@@ -76,11 +81,16 @@ func (a *Agent) runOutbound() error {
 	for {
 		conn, err := protocol.Dial(a.cfg.URL, a.cfg.CertPath, a.cfg.Token)
 		if err != nil {
-			log.Printf("[agent] connection failed: %v, retrying in 5s", err)
+			a.backoffAttempt++
+			if a.cfg.MaxRetries > 0 && a.backoffAttempt > a.cfg.MaxRetries {
+				return fmt.Errorf("max retries (%d) exceeded: %w", a.cfg.MaxRetries, err)
+			}
+			backoff := a.computeBackoff()
+			log.Printf("[agent] connection failed (attempt %d): %v, retrying in %v", a.backoffAttempt, err, backoff)
 			select {
 			case <-a.stopped:
 				return nil
-			case <-time.After(5 * time.Second):
+			case <-time.After(backoff):
 			}
 			continue
 		}
@@ -89,6 +99,7 @@ func (a *Agent) runOutbound() error {
 		a.conn = conn
 		a.connectedAt = time.Now()
 		a.pingMisses = 0
+		a.backoffAttempt = 0
 		a.mu.Unlock()
 		a.handleConnection(conn)
 		// disconnected — reconnect
@@ -99,6 +110,31 @@ func (a *Agent) runOutbound() error {
 		default:
 		}
 	}
+}
+
+// computeBackoff returns an exponential backoff duration with jitter.
+// Formula: min * 2^(attempt-1) capped at max, plus random jitter.
+func (a *Agent) computeBackoff() time.Duration {
+	min := a.cfg.BackoffMin
+	max := a.cfg.BackoffMax
+	if min <= 0 {
+		min = 1 * time.Second
+	}
+	if max <= 0 {
+		max = 60 * time.Second
+	}
+	// Cap the exponent to avoid overflow: 2^10 = 1024 is plenty
+	exp := a.backoffAttempt - 1
+	if exp > 10 {
+		exp = 10
+	}
+	base := min * time.Duration(1<<exp)
+	if base > max {
+		base = max
+	}
+	// Add jitter: random value in [0, base/2]
+	jitter := time.Duration(rand.Int64N(int64(base/2 + 1)))
+	return base + jitter
 }
 
 func (a *Agent) runInbound() error {

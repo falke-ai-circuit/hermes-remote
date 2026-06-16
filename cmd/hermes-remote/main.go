@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/falke-ai-circuit/hermes-remote/internal/agent"
 )
@@ -19,6 +20,9 @@ var (
 	mode       = flag.String("mode", "silent", "Agent mode: silent or interactive")
 	token      = flag.String("token", "", "Authentication token")
 	name       = flag.String("name", "hermes-remote", "Display name for the agent")
+	maxRetries = flag.Int("max-retries", 0, "Max reconnect attempts (0=infinite)")
+	backoffMin = flag.Duration("backoff-min", 1*time.Second, "Min backoff duration")
+	backoffMax = flag.Duration("backoff-max", 60*time.Second, "Max backoff duration")
 )
 
 func main() {
@@ -44,11 +48,14 @@ func main() {
 	}
 
 	cfg := agent.Config{
-		Mode:  "outbound",
-		URL:   *connectURL,
-		Addr:  *listenAddr,
-		Token: tokenVal,
-		Name:  *name,
+		Mode:       "outbound",
+		URL:        *connectURL,
+		Addr:       *listenAddr,
+		Token:      tokenVal,
+		Name:       *name,
+		MaxRetries: *maxRetries,
+		BackoffMin: *backoffMin,
+		BackoffMax: *backoffMax,
 	}
 
 	// Ensure the WebSocket URL includes the /ws path the server expects
