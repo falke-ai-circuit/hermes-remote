@@ -1,9 +1,12 @@
-# BLUEPRINT — hermes-remote v0.1 (a0)
+# BLUEPRINT — hermes-remote v0.1.0-a0
 
 **Author:** Architect (via Orchestrator)
 **Date:** 2026-06-13
-**Status:** DRAFT → approved by GR15
+**Last Updated:** 2026-06-16
+**Status:** ACTIVE — Phase A-C complete, Phase D pending
 **Repo:** `github.com/falke-ai-circuit/hermes-remote`
+**Branch:** `main`
+**Tag:** `v0.1.0-a0`
 
 ---
 
@@ -42,7 +45,7 @@ The operator agent needs to control remote machines — desktops, laptops, serve
 ## 4. Protocol
 
 - **Transport:** WebSocket (RFC 6455) over TLS 1.3
-- **Auth:** Token in header `Authorization: Bearer <token>`
+- **Auth:** Token in header `Authorization: Bearer ***`
 - **Messages:** JSON envelope with `{id, type, params, result, error}`
 - **Commands:** 25 commands across 5 categories (shell, filesystem, screen, input, system)
 - **Heartbeat:** 15s ping/pong, 3-miss disconnect threshold
@@ -78,8 +81,10 @@ Operative profile gets new tools via `kind: standalone` Hermes plugin:
 ```
 hermes-remote/
 ├── cmd/
-│   └── hermes-remote/
-│       └── main.go              # CLI flags, mode selection
+│   ├── hermes-remote/
+│   │   └── main.go              # CLI flags, mode selection
+│   └── server/
+│       └── main.go              # Server entry point
 ├── internal/
 │   ├── protocol/
 │   │   ├── messages.go          # All message types
@@ -92,29 +97,72 @@ hermes-remote/
 │   │   ├── proxy.go             # LLM proxy to providers
 │   │   └── session.go           # Per-agent Hermes session
 │   ├── agent/
-│   │   ├── agent.go             # Agent loop + command dispatch
-│   │   └── handlers.go           # Command handlers (shell, fs, etc.)
+│   │   └── agent.go             # Agent loop + command dispatch
 │   └── platform/
 │       ├── platform.go          # Platform interface
-│       ├── platform_linux.go    # Linux implementation
-│       └── platform_windows.go  # Windows stub
+│       └── platform_linux.go    # Linux implementation
 ├── tool/
-│   └── plugin.py                # Hermes plugin registration
+│   ├── plugin.py                # Hermes plugin registration
+│   └── plugin.yaml              # Plugin manifest
+├── .github/
+│   ├── workflows/
+│   │   ├── build.yml            # CI: go vet + build + test
+│   │   └── release.yml          # goreleaser on tag
+│   └── agents/
+│       ├── ANALYST.md
+│       ├── ARCHITECT.md
+│       ├── CODER.md
+│       ├── REVIEWER.md
+│       └── OPERATIVE.md
+├── AGENTS.md                    # Agent delegation rules
+├── CLAUDE.md                    # Project overview + build/run instructions
+├── project_knowledge.json       # Hot cache + architecture map + gotchas
+├── BLUEPRINT.md                 # This document
+├── ROADMAP.md                   # Phase overview + timeline
+├── CHANGELOG.md                 # Release history
+├── CONTRIBUTING.md              # PR process + conventions
+├── README.md                    # Project overview
+├── LICENSE                      # MIT
+├── Makefile                     # Build, test, cross-compile
 ├── go.mod
 ├── go.sum
-├── Makefile
-└── README.md
+└── .gitignore
 ```
 
-## 9. Success Criteria
+## 9. Phase Status
 
-| # | Criterion | Evidence |
-|---|-----------|----------|
-| 1 | Binary compiles for linux/amd64 | `go build -o hermes-remote ./cmd/hermes-remote` exits 0 |
-| 2 | Server starts on :7700 with TLS | `./hermes-remote server --port 7700` accepts connections |
-| 3 | Agent connects in silent mode | `./hermes-remote --connect wss://localhost:7700 --mode silent` registers in registry |
-| 4 | Agent connects in interactive mode | `./hermes-remote --connect wss://localhost:7700 --mode interactive` opens CLI |
-| 5 | Operative tools work | `remote_agent_list` shows connected agents |
-| 6 | Remote shell works | `remote_shell agent="a0-test" command="echo hello"` returns `hello` |
-| 7 | Kali Linux test | Binary compiled and deployed, connects from Kali container to server |
-| 8 | Multi-agent | 3 agents connected simultaneously, all visible in registry |
+| Phase | Scope | Status |
+|-------|-------|--------|
+| **A** | Scaffold — protocol, server, agent, platform, CLI, plugin | ✅ Complete |
+| **B** | Fixes — 8 bugs across 6 files, Go agent connects, all 4 endpoints verified | ✅ Complete |
+| **C** | Plugin — 5 remote_* tools registered, tested | ✅ Complete |
+| **D** | Integration test on remote host (GWVXG74) | ⏳ Pending |
+| **E** | Production hardening — TLS mutual auth, token rotation, reconnect | ⏳ Pending |
+| **F** | Final review + v1.0.0 release | ⏳ Pending |
+
+## 10. Success Criteria
+
+| # | Criterion | Evidence | Status |
+|---|-----------|----------|--------|
+| 1 | Binary compiles for linux/amd64 | `go build ./cmd/...` exits 0 | ✅ |
+| 2 | Server starts on :7700 with TLS | `./server --addr :7700` accepts connections | ✅ |
+| 3 | Agent connects in silent mode | `./hermes-remote --connect wss://localhost:7700 --mode silent` registers | ✅ |
+| 4 | Agent connects in interactive mode | `./hermes-remote --connect wss://localhost:7700 --mode interactive` opens CLI | ✅ |
+| 5 | Operative tools work | `remote_agent_list` shows connected agents | ✅ |
+| 6 | Remote shell works | `remote_shell agent="a0-test" command="echo hello"` returns `hello` | ✅ |
+| 7 | Kali Linux test | Binary compiled and deployed, connects from Kali container to server | ⏳ |
+| 8 | Multi-agent | 3 agents connected simultaneously, all visible in registry | ⏳ |
+| 9 | Cross-compile | `make cross` builds for all 5 targets | ✅ |
+| 10 | CI passes | `go build ./... && go vet ./... && go test ./...` | ✅ |
+
+## 11. Closure Criteria
+
+```
+ALL phases A-F complete
+ALL 10 success criteria PASS
+Git tag v1.0.0
+GitHub release with binary artifacts for all platforms
+Plugin deployed to operative profile
+Evolution entry in orchestrator evolution.jsonl
+CLOSURE_REQUEST sent to FalkeCondBot
+```

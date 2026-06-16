@@ -1,62 +1,168 @@
 {
   "project": "hermes-remote",
   "version": "v0.1.0-a0",
-  "last_updated": "2026-06-13T15:00:00Z",
+  "last_updated": "2026-06-16T16:00:00Z",
   "hot_cache": [
     {
-      "topic": "Module path is github.com/falke-ai-circuit/hermes-remote",
-      "weight": 0.95,
-      "last_hit": "2026-06-13T14:45:00Z",
-      "files": ["go.mod", "ALL *.go files"],
-      "note": "All Go files must import github.com/falke-ai-circuit/hermes-remote. The old falke-remote path was from the initial scaffold."
+      "key": "module_path",
+      "value": "github.com/falke-ai-circuit/hermes-remote",
+      "note": "All Go files must import this path. The old falke-remote path was from the initial scaffold."
     },
     {
-      "topic": "Go 1.22.5 installed at /opt/data/go/bin/go",
-      "weight": 0.90,
-      "last_hit": "2026-06-13T14:30:00Z",
-      "files": [],
-      "note": "Not a system package — downloaded from go.dev. Use export PATH=/opt/data/go/bin:$PATH before building."
+      "key": "go_version",
+      "value": "1.22.5",
+      "note": "Installed at /opt/data/go/bin/go. Not a system package — downloaded from go.dev. Use export PATH=/opt/data/go/bin:$PATH before building."
     },
     {
-      "topic": "gorilla/websocket v1.5.3 is the only external dependency",
-      "weight": 0.85,
-      "last_hit": "2026-06-13T14:46:00Z",
-      "files": ["go.mod", "go.sum"],
-      "note": "Zero other dependencies. The binary should stay minimal — add new deps only with justification."
+      "key": "dependency",
+      "value": "gorilla/websocket v1.5.3",
+      "note": "Only external dependency. Binary should stay minimal — add new deps only with justification."
+    },
+    {
+      "key": "build_command",
+      "value": "make build",
+      "note": "Builds both binaries: cmd/hermes-remote/ and cmd/server/"
+    },
+    {
+      "key": "cross_compile",
+      "value": "make cross",
+      "note": "Cross-compiles for linux/amd64, linux/arm64, windows/amd64, darwin/amd64, darwin/arm64"
+    },
+    {
+      "key": "server_port",
+      "value": "7700",
+      "note": "Default WebSocket server port, configurable via --addr"
+    },
+    {
+      "key": "token",
+      "value": "hermes.circuit.remote.2026",
+      "note": "Default auth token for agent-server connection"
+    },
+    {
+      "key": "plugin_tools",
+      "value": 5,
+      "note": "remote_agent_list, remote_shell, remote_fs_read, remote_fs_write, remote_screenshot"
+    },
+    {
+      "key": "protocol_commands",
+      "value": 25,
+      "note": "shell, shell_pty, shell_stream, fs_*, screenshot_*, screen_*, click, type, key, hotkey, health, process_*, open_url, notify, clipboard_*, token_rotate"
+    },
+    {
+      "key": "error_codes",
+      "value": 9,
+      "note": "Defined in internal/protocol/messages.go"
+    },
+    {
+      "key": "branch",
+      "value": "main",
+      "note": "Active development branch"
+    },
+    {
+      "key": "tag",
+      "value": "v0.1.0-a0",
+      "note": "Initial alpha release tag"
+    },
+    {
+      "key": "license",
+      "value": "MIT",
+      "note": "LICENSE file at repo root"
     }
   ],
   "architecture": {
-    "files": {
-      "internal/protocol/messages.go": "All JSON message types, Envelope, 25 command types, 9 error codes, helper functions",
-      "internal/protocol/websocket.go": "WebSocket dial, listen, TLS config, cert fingerprint",
-      "internal/protocol/server.go": "TLS server wrapper with WebSocket upgrade handler",
-      "internal/protocol/binary.go": "Binary frame encoding for large payloads (>1MB)",
-      "internal/server/server.go": "Multi-session WebSocket server, HTTP API endpoints",
-      "internal/server/registry.go": "Agent registry with JSON persistence",
-      "internal/server/proxy.go": "LLM proxy routing to providers",
-      "internal/server/session.go": "Per-agent session manager (memory, skills, context)",
-      "internal/agent/agent.go": "Agent loop, connection management, command dispatch",
-      "internal/platform/platform.go": "Platform interface (shell, fs, screen, input, system)",
-      "internal/platform/platform_linux.go": "Linux implementation (bash, xdotool, import/scrot, xclip)",
-      "cmd/hermes-remote/main.go": "CLI entry point (--connect, --listen, --mode, --token, --name)",
-      "cmd/server/main.go": "Server entry point",
-      "tool/plugin.py": "Hermes plugin registering 5 remote tools",
-      "tool/plugin.yaml": "Plugin manifest"
+    "cmd/hermes-remote": {
+      "purpose": "Agent binary — CLI entry point",
+      "depends_on": ["internal/agent", "internal/protocol", "internal/platform"],
+      "key_files": ["main.go"],
+      "flags": ["--connect", "--listen", "--mode", "--token", "--name"]
     },
-    "commands": [
-      "shell", "shell_pty", "shell_stream",
-      "fs_list", "fs_stat", "fs_read", "fs_write", "fs_delete", "fs_move", "fs_mkdir",
-      "screenshot", "screenshot_region", "screen_info", "screen_stream_start", "screen_stream_stop",
-      "click", "type", "key", "hotkey",
-      "health", "process_list", "process_kill", "open_url", "notify",
-      "clipboard_get", "clipboard_set", "token_rotate"
-    ],
-    "tools": [
-      "remote_agent_list", "remote_shell", "remote_fs_read", "remote_fs_write", "remote_screenshot"
-    ]
+    "cmd/server": {
+      "purpose": "Server binary — WebSocket server + LLM proxy",
+      "depends_on": ["internal/server", "internal/protocol"],
+      "key_files": ["main.go"],
+      "flags": ["--addr", "--token"]
+    },
+    "internal/protocol": {
+      "purpose": "WebSocket protocol, message types, TLS",
+      "depends_on": ["gorilla/websocket"],
+      "key_files": ["messages.go", "websocket.go", "server.go", "binary.go"],
+      "types": ["Envelope", "25 command types", "9 error codes"]
+    },
+    "internal/server": {
+      "purpose": "Multi-session WebSocket server, agent registry, LLM proxy",
+      "depends_on": ["internal/protocol"],
+      "key_files": ["server.go", "registry.go", "proxy.go", "session.go"]
+    },
+    "internal/agent": {
+      "purpose": "Agent loop, connection management, command dispatch",
+      "depends_on": ["internal/protocol", "internal/platform"],
+      "key_files": ["agent.go"]
+    },
+    "internal/platform": {
+      "purpose": "Platform interface + Linux implementation",
+      "depends_on": [],
+      "key_files": ["platform.go", "platform_linux.go"],
+      "tools": ["bash", "xdotool", "import/scrot", "xclip"]
+    },
+    "tool": {
+      "purpose": "Hermes plugin registering 5 remote tools for operative profile",
+      "depends_on": [],
+      "key_files": ["plugin.py", "plugin.yaml"],
+      "tools": ["remote_agent_list", "remote_shell", "remote_fs_read", "remote_fs_write", "remote_screenshot"]
+    }
   },
-  "gotchas": [],
+  "gotchas": [
+    {
+      "id": "HR-001",
+      "rule": "Module path is github.com/falke-ai-circuit/hermes-remote",
+      "detail": "The initial scaffold used 'falke-remote'. All imports must use the full GitHub path. go.mod was fixed in commit 3ab97c9.",
+      "affected": ["go.mod", "ALL *.go files"]
+    },
+    {
+      "id": "HR-002",
+      "rule": "Go 1.22.5 is not a system package",
+      "detail": "Installed at /opt/data/go/bin/go from go.dev. Must export PATH=/opt/data/go/bin:$PATH before building. System Go (if installed) may be older.",
+      "affected": ["Makefile", "build process"]
+    },
+    {
+      "id": "HR-003",
+      "rule": "gorilla/websocket is the only external dependency",
+      "detail": "Zero other dependencies. The binary should stay minimal. Add new deps only with explicit justification in PR description.",
+      "affected": ["go.mod", "go.sum"]
+    },
+    {
+      "id": "HR-004",
+      "rule": "Agent connect URL must include /ws path",
+      "detail": "Fixed in commit dc02281. If the user provides a URL without /ws (e.g., wss://host:7700), the agent appends /ws automatically. The server's WebSocket upgrade handler is at /ws.",
+      "affected": ["cmd/hermes-remote/main.go", "internal/agent/agent.go"]
+    },
+    {
+      "id": "HR-005",
+      "rule": "TLS cert fingerprint verification",
+      "detail": "The agent verifies the server's TLS certificate fingerprint on first connect. For testing, use --insecure flag to skip verification. Production should use proper CA-signed certs.",
+      "affected": ["internal/protocol/websocket.go"]
+    },
+    {
+      "id": "HR-006",
+      "rule": "Platform tools must be installed on target",
+      "detail": "Linux: xdotool (click/type/key), import or scrot (screenshot), xclip (clipboard). macOS: osascript (screenshot), pbcopy/pbpaste (clipboard). Windows: PowerShell, .NET screen capture. Missing tools cause command timeouts, not clear errors.",
+      "affected": ["internal/platform/platform_linux.go"]
+    }
+  ],
   "recent_changes": [
+    {
+      "version": "v0.1.0-a0",
+      "date": "2026-06-14",
+      "summary": "8 bugs fixed across 6 files. Go agent connects + all 4 endpoints verified. Plugin registers 5 remote_* tools. Ready for Phase D (integration test on remote host).",
+      "files": [
+        "internal/protocol/messages.go",
+        "internal/protocol/websocket.go",
+        "internal/agent/agent.go",
+        "internal/server/server.go",
+        "cmd/hermes-remote/main.go",
+        "tool/plugin.py"
+      ]
+    },
     {
       "version": "v0.1.0-a0",
       "date": "2026-06-13",
