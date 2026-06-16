@@ -93,6 +93,21 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
   - `GOOS=windows GOARCH=amd64 go build ./cmd/...` exits 0 (no regression)
   - `GOOS=darwin/linux/windows go vet ./...` exits 0
 
+#### Commit 4: Rate Limiting (`947c306`)
+
+- Added **per-agent token-bucket rate limiter** to the LLM proxy using stdlib only (`sync` + `time` — zero new external deps)
+- **NEW** `RateLimiter` struct in `proxy.go`: per-agent `tokenBucket` map, configurable rate (tokens/sec), burst (bucket capacity), and global `maxConcurrent` (in-flight cap)
+- `Allow(agentID)` — refills tokens at `rate`/sec capped at `burst`, admits if ≥1 token AND under concurrency cap; consumes a token + reserves a slot on success
+- `Release()` — decrements the in-flight counter; caller must call exactly once per successful `Allow()`
+- Defaults: 10 req/s, burst 20, max 5 concurrent (matching the design spec)
+- **LLMProxy.Call(agentID, prompt)** — signature changed to take `agentID` for per-agent limiting; returns `("[LLM proxy: rate limited]", "rate_limited")` when denied. `SetRateLimiter()` allows overriding the default limiter
+- **Server wiring**: `Server` gains a `rateLimit *RateLimiter` field; new `NewServerWithRateLimit(addr, token, registry, RateLimitConfig)` constructor applies a config to the proxy
+- **CLI flags** (`cmd/server/main.go`): `--rate-limit` (float, default 10), `--rate-burst` (int, default 20), `--max-concurrent` (int, default 5). Server now uses `NewServerWithRateLimit` and logs the active limits on startup
+- **NEW** `RateLimitConfig` exported struct so external packages (the server binary) can pass config to the constructor
+- **NEW** `internal/server/proxy_test.go` — 6 unit tests covering: burst exhaustion, concurrency cap + Release, token refill after sleep, per-agent isolation, proxy `Call()` rate-limit marker, and `NewServerWithRateLimit` wiring. All pass.
+- Build + vet + cross-compile (darwin/linux/windows × amd64/arm64) all exit 0
+- `go test ./internal/server/...` passes (6/6)
+
 ### Phase D — Kali Integration Test (2026-06-16)
 
 | Test | Result |
@@ -135,7 +150,8 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 | 6 | `a0a20fd` | feat: Phase E Commit 1 — exponential backoff + jitter reconnect hardening |
 | 7 | `d16dff3` | feat: Phase E Commit 2 — Windows real PowerShell implementations (6 stubs → real) |
 | 8 | `438ebc7` | feat: Phase E Commit 3 — macOS real implementation (25 functions via native CLI tools) |
+| 9 | `947c306` | feat: Phase E Commit 4 — per-agent token-bucket rate limiter + CLI flags (--rate-limit/--rate-burst/--max-concurrent) |
 
 ### Planned
-- Phase E: Production hardening (TLS mutual auth, token rotation, Windows/macOS real implementations)
+- Phase E: Production hardening (TLS mutual auth, token rotation, Windows/macOS real implementations, rate limiting, health monitoring)
 - Phase F: Final review + v1.0.0 release

@@ -1,7 +1,7 @@
 {
   "project": "hermes-remote",
   "version": "v0.1.0-a0",
-  "last_updated": "2026-06-16T21:30:00Z",
+  "last_updated": "2026-06-16T22:00:00Z",
   "hot_cache": [
     {
       "key": "module_path",
@@ -86,7 +86,12 @@
     {
       "key": "phase_e_status",
       "value": "in_progress",
-      "note": "Commit 3/4 complete: reconnect hardening (a0a20fd) + Windows real PowerShell implementations (d16dff3) + macOS real implementation (438ebc7). Remaining: TLS mutual auth, token rotation, rate limiting, health monitoring."
+      "note": "Commit 4/4 complete: reconnect hardening (a0a20fd) + Windows real PowerShell (d16dff3) + macOS real (438ebc7) + rate limiting (Commit 4). Remaining: TLS mutual auth, token rotation, health monitoring."
+    },
+    {
+      "key": "rate_limiting",
+      "value": "token-bucket per-agent",
+      "note": "Phase E Commit 4: RateLimiter in internal/server/proxy.go (stdlib sync+time only). Per-agent tokenBucket map, Allow(agentID)/Release(), defaults 10 req/s burst 20 max 5 concurrent. LLMProxy.Call signature changed to Call(agentID, prompt); returns provider 'rate_limited' when denied. Server gains rateLimit field + NewServerWithRateLimit(addr,token,registry,RateLimitConfig). CLI flags: --rate-limit (10), --rate-burst (20), --max-concurrent (5). 6 unit tests in proxy_test.go all pass. Zero new deps."
     },
     {
       "key": "windows_platform_status",
@@ -110,7 +115,7 @@
       "purpose": "Server binary — WebSocket server + LLM proxy",
       "depends_on": ["internal/server", "internal/protocol"],
       "key_files": ["main.go"],
-      "flags": ["--addr", "--token"]
+      "flags": ["--addr", "--token", "--registry", "--rate-limit", "--rate-burst", "--max-concurrent"]
     },
     "internal/protocol": {
       "purpose": "WebSocket protocol, message types, TLS",
@@ -207,9 +212,30 @@
       "rule": "macOS ProcessList parses ps -axo from the end (comm contains spaces)",
       "detail": "macOS `ps -axo pid,comm,pcpu,rss` — the comm column can contain spaces (e.g. '/path to/app'), so platform_darwin.go parses fields from the end: last field is rss (KB→MB), second-to-last is pcpu (float), field[0] is pid, and the middle is the joined name. Do not naively Sscanf the whole line.",
       "affected": ["internal/platform/platform_darwin.go"]
+    },
+    {
+      "id": "HR-012",
+      "rule": "LLMProxy.Call signature changed to Call(agentID, prompt) in Phase E Commit 4",
+      "detail": "Phase E Commit 4 added per-agent rate limiting. LLMProxy.Call now takes agentID as its first argument for per-agent token-bucket limiting. Any caller still using the old Call(prompt) signature will fail to compile. NewLLMProxy() still works unchanged (it creates a default RateLimiter). Use NewServerWithRateLimit(addr, token, registry, RateLimitConfig) to configure limits from CLI flags; NewServer(addr, token, registry) uses proxy defaults (10 req/s, burst 20, max 5 concurrent).",
+      "affected": ["internal/server/proxy.go", "internal/server/server.go", "cmd/server/main.go"]
     }
   ],
   "recent_changes": [
+    {
+      "version": "v0.1.0-a0",
+      "date": "2026-06-16",
+      "summary": "Phase E Commit 4: Rate Limiting — per-agent token-bucket rate limiter on the LLM proxy (stdlib sync+time only, zero new deps). RateLimiter struct with per-agent tokenBucket map, Allow(agentID)/Release(), configurable rate/burst/maxConcurrent (defaults 10 req/s, burst 20, max 5 concurrent). LLMProxy.Call signature changed to Call(agentID, prompt); returns 'rate_limited' provider marker when denied. SetRateLimiter() overrides defaults. Server gains rateLimit field + exported RateLimitConfig + NewServerWithRateLimit constructor. CLI flags: --rate-limit (10), --rate-burst (20), --max-concurrent (5). 6 unit tests in internal/server/proxy_test.go all pass. Build + vet + cross-compile (darwin/linux/windows × amd64/arm64) all exit 0.",
+      "files": [
+        "internal/server/proxy.go",
+        "internal/server/proxy_test.go",
+        "internal/server/server.go",
+        "cmd/server/main.go",
+        "CHANGELOG.md",
+        "ROADMAP.md",
+        "project_knowledge.json",
+        "BLUEPRINT.md"
+      ]
+    },
     {
       "version": "v0.1.0-a0",
       "date": "2026-06-16",

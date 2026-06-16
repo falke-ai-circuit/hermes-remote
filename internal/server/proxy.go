@@ -3,18 +3,117 @@ package server
 import (
 	"fmt"
 	"os"
+	"sync"
+	"time"
 )
+
+// RateLimiter implements a per-agent token-bucket rate limiter with a global
+// concurrent-request cap. It uses only the standard library (sync + time).
+type RateLimiter struct {
+	mu            sync.Mutex
+	buckets       map[string]*tokenBucket // per-agent token buckets
+	rate          float64                 // tokens added per second
+	burst         int                     // maximum tokens a bucket can hold
+	maxConcurrent int                     // maximum concurrent in-flight requests
+	active        int                     // current in-flight request count
+}
+
+// tokenBucket holds the per-agent token state.
+type tokenBucket struct {
+	tokens   float64
+	lastTime time.Time
+}
+
+// NewRateLimiter creates a RateLimiter.
+//
+//   - rate:          steady-state requests per second (tokens replenished at this rate)
+//   - burst:         maximum burst size (bucket capacity); first burst calls pass immediately
+//   - maxConcurrent: hard cap on concurrent in-flight requests across all agents
+func NewRateLimiter(rate float64, burst int, maxConcurrent int) *RateLimiter {
+	if rate <= 0 {
+		rate = 10.0
+	}
+	if burst <= 0 {
+		burst = 20
+	}
+	if maxConcurrent <= 0 {
+		maxConcurrent = 5
+	}
+	return &RateLimiter{
+		buckets:       make(map[string]*tokenBucket),
+		rate:          rate,
+		burst:         burst,
+		maxConcurrent: maxConcurrent,
+	}
+}
+
+// Allow checks whether a request from agentID may proceed.
+// It returns true if the request is admitted (a token consumed and a
+// concurrency slot reserved), in which case the caller MUST call Release
+// exactly once when the request completes. It returns false if the request
+// is denied due to either the concurrent-request cap or token exhaustion.
+func (rl *RateLimiter) Allow(agentID string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	// Global concurrency cap.
+	if rl.active >= rl.maxConcurrent {
+		return false
+	}
+
+	// Lazily create the agent's bucket, pre-filled to burst capacity.
+	b, ok := rl.buckets[agentID]
+	if !ok {
+		b = &tokenBucket{
+			tokens:   float64(rl.burst),
+			lastTime: time.Now(),
+		}
+		rl.buckets[agentID] = b
+	}
+
+	// Refill tokens based on elapsed time since last check.
+	now := time.Now()
+	elapsed := now.Sub(b.lastTime).Seconds()
+	b.tokens += elapsed * rl.rate
+	if b.tokens > float64(rl.burst) {
+		b.tokens = float64(rl.burst)
+	}
+	b.lastTime = now
+
+	// Require at least one token to admit the request.
+	if b.tokens >= 1.0 {
+		b.tokens -= 1.0
+		rl.active++
+		return true
+	}
+	return false
+}
+
+// Release decrements the in-flight request counter, freeing a concurrency
+// slot. It must be called exactly once for each successful Allow().
+func (rl *RateLimiter) Release() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	if rl.active > 0 {
+		rl.active--
+	}
+}
 
 // LLMProxy provides LLM API call functionality, reading provider keys from environment.
 type LLMProxy struct {
 	provider string // detected from env vars: "deepseek", "minimax", "ollama", "generic"
 	apiKey   string
+	limiter  *RateLimiter
 }
 
 // NewLLMProxy creates an LLM proxy that reads keys from environment variables.
 // Priority: HERMES_REMOTE_LLM_KEY (generic), DEEPSEEK_API_KEY, MINIMAX_API_KEY, OLLAMA_API_KEY.
+// The proxy is initialised with default rate limits: 10 req/s, burst 20, max 5 concurrent.
+// Use SetRateLimiter to override these limits (e.g. from CLI flags).
 func NewLLMProxy() *LLMProxy {
-	p := &LLMProxy{}
+	p := &LLMProxy{
+		limiter: NewRateLimiter(10.0, 20, 5), // 10 req/s, burst 20, max 5 concurrent
+	}
 
 	if key := os.Getenv("HERMES_REMOTE_LLM_KEY"); key != "" {
 		p.provider = "generic"
@@ -33,9 +132,25 @@ func NewLLMProxy() *LLMProxy {
 	return p
 }
 
-// Call sends a prompt to the configured LLM provider and returns the response text.
-// Returns the response string and provider name.
-func (p *LLMProxy) Call(prompt string) (string, string) {
+// SetRateLimiter replaces the proxy's rate limiter. Pass a RateLimiter
+// configured from CLI flags / env vars. Passing nil disables rate limiting.
+func (p *LLMProxy) SetRateLimiter(rl *RateLimiter) {
+	p.limiter = rl
+}
+
+// Call sends a prompt to the configured LLM provider and returns the response
+// text and provider name. The agentID is used for per-agent rate limiting; if
+// the rate limiter rejects the request a rate-limited marker is returned with
+// the provider name "rate_limited".
+func (p *LLMProxy) Call(agentID string, prompt string) (string, string) {
+	// Enforce per-agent rate limiting + global concurrency cap.
+	if p.limiter != nil {
+		if !p.limiter.Allow(agentID) {
+			return "[LLM proxy: rate limited]", "rate_limited"
+		}
+		defer p.limiter.Release()
+	}
+
 	if p.apiKey == "" {
 		return fmt.Sprintf("[LLM proxy error: no API key configured. Set HERMES_REMOTE_LLM_KEY or provider-specific key.]"), p.provider
 	}

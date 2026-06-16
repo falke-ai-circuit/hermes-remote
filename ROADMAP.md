@@ -80,7 +80,7 @@
 
 **10/10 PASS.** 3 bugs found and fixed during testing (screenshot env, process-list route, --addr flag).
 
-## Phase E — Production Hardening ⏳ (Commit 3/4 complete)
+## Phase E — Production Hardening ⏳ (Commit 4/4 complete)
 
 ### E1: Reconnect Hardening ✅ (`a0a20fd`)
 - Exponential backoff + jitter in `runOutbound()` (replaces fixed 5s)
@@ -104,10 +104,20 @@
 - ScreenStreamStart/Stop kept as stubs (deferred to Phase F)
 - Cross-compile passes for darwin/linux/windows; `go vet ./...` passes for all three GOOS
 
-### E4: Remaining
+### E4: Rate Limiting ✅ (`947c306`)
+- Per-agent **token-bucket** rate limiter on the LLM proxy — stdlib only (`sync` + `time`, zero new deps)
+- `RateLimiter` struct: per-agent `tokenBucket` map, configurable `rate` (tokens/sec), `burst` (bucket cap), global `maxConcurrent` (in-flight cap)
+- `Allow(agentID)` refills tokens at `rate`/sec (capped at `burst`), admits if ≥1 token AND under concurrency cap; `Release()` decrements in-flight counter
+- Defaults: 10 req/s, burst 20, max 5 concurrent
+- `LLMProxy.Call(agentID, prompt)` — signature gains `agentID`; returns `("rate_limited")` marker when denied; `SetRateLimiter()` overrides defaults
+- Server: `Server.rateLimit` field + `NewServerWithRateLimit(addr, token, registry, RateLimitConfig)` constructor + exported `RateLimitConfig`
+- CLI flags (`cmd/server/main.go`): `--rate-limit` (10), `--rate-burst` (20), `--max-concurrent` (5)
+- 6 unit tests in `internal/server/proxy_test.go` — burst, concurrency cap + Release, token refill, per-agent isolation, proxy Call marker, constructor wiring. All pass.
+- Build + vet + cross-compile (darwin/linux/windows × amd64/arm64) all exit 0
+
+### E5: Remaining
 - TLS mutual authentication (client certs)
 - Token rotation (expiring tokens, refresh flow)
-- Rate limiting on LLM proxy
 - Agent health monitoring + alerting
 
 ## Phase F — Final Review + Release ⏳
@@ -130,7 +140,7 @@
 | B | 1-2 turns (parallel) | ✅ Complete |
 | C | 1 turn | ✅ Complete |
 | D | 1 turn | ✅ Complete — Kali Linux (100.78.148.26) |
-| E | 1-2 turns | ⏳ In Progress — Commit 3/4 complete (reconnect hardening + Windows real + macOS real) |
+| E | 1-2 turns | ⏳ In Progress — Commit 4/4 complete (reconnect hardening + Windows real + macOS real + rate limiting) |
 | F | 1 turn | ⏳ Pending |
 
 **v0.1.0-a0 delivered: 3 commits, 2 binaries, 5 remote tools, 8 bugs fixed. Ready for Phase D integration test.**

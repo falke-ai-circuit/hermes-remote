@@ -17,6 +17,15 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// RateLimitConfig holds the rate-limiter settings supplied from the CLI /
+// environment. A zero value falls back to the proxy defaults (10/s, burst 20,
+// max 5 concurrent).
+type RateLimitConfig struct {
+	RatePerSec    float64 // tokens added per second; <=0 → default
+	Burst         int     // bucket capacity; <=0 → default
+	MaxConcurrent int     // global in-flight cap; <=0 → default
+}
+
 // Server is the multi-session WebSocket server with agent registry, LLM proxy, and session management.
 type Server struct {
 	addr      string
@@ -24,6 +33,7 @@ type Server struct {
 	registry  *Registry
 	sessions  *SessionManager
 	proxy     *LLMProxy
+	rateLimit *RateLimiter
 	srv       *http.Server
 	mux       *http.ServeMux
 
@@ -42,6 +52,17 @@ func NewServer(addr string, token string, registryPath string) *Server {
 		proxy:    NewLLMProxy(),
 		conns:    make(map[string]*websocket.Conn),
 	}
+}
+
+// NewServerWithRateLimit creates a new server with an explicit rate-limit
+// configuration applied to the LLM proxy. Pass a RateLimitConfig whose zero
+// values fall back to the proxy defaults (10 req/s, burst 20, max 5
+// concurrent).
+func NewServerWithRateLimit(addr string, token string, registryPath string, rlCfg RateLimitConfig) *Server {
+	srv := NewServer(addr, token, registryPath)
+	srv.rateLimit = NewRateLimiter(rlCfg.RatePerSec, rlCfg.Burst, rlCfg.MaxConcurrent)
+	srv.proxy.SetRateLimiter(srv.rateLimit)
+	return srv
 }
 
 // Start begins listening for WebSocket and HTTP connections.
