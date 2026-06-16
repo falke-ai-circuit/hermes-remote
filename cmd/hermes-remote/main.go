@@ -15,15 +15,20 @@ import (
 )
 
 var (
-	connectURL = flag.String("connect", "", "WebSocket server URL to connect to (wss://host:port)")
-	listenAddr = flag.String("listen", "", "Address to listen on for incoming connections (:port)")
-	mode       = flag.String("mode", "silent", "Agent mode: silent or interactive")
-	token      = flag.String("token", "", "Authentication token")
-	name       = flag.String("name", "hermes-remote", "Display name for the agent")
-	maxRetries = flag.Int("max-retries", 0, "Max reconnect attempts (0=infinite)")
-	backoffMin = flag.Duration("backoff-min", 1*time.Second, "Min backoff duration")
-	backoffMax = flag.Duration("backoff-max", 60*time.Second, "Max backoff duration")
-	tokenFile  = flag.String("token-file", ".hermes-remote-token", "Path to persist the auth token so rotated tokens survive reconnects (empty = no persistence)")
+	connectURL    = flag.String("connect", "", "WebSocket server URL to connect to (wss://host:port)")
+	listenAddr    = flag.String("listen", "", "Address to listen on for incoming connections (:port)")
+	mode          = flag.String("mode", "silent", "Agent mode: silent or interactive")
+	token         = flag.String("token", "", "Authentication token")
+	name          = flag.String("name", "hermes-remote", "Display name for the agent")
+	maxRetries    = flag.Int("max-retries", 0, "Max reconnect attempts (0=infinite)")
+	backoffMin    = flag.Duration("backoff-min", 1*time.Second, "Min backoff duration")
+	backoffMax    = flag.Duration("backoff-max", 60*time.Second, "Max backoff duration")
+	tokenFile     = flag.String("token-file", ".hermes-remote-token", "Path to persist the auth token so rotated tokens survive reconnects (empty = no persistence)")
+	certPath      = flag.String("cert", "", "CA certificate file (PEM) for verifying the server's TLS cert on outbound wss:// connections")
+	clientCertFile = flag.String("client-cert", "", "Client certificate file (PEM) for TLS mutual authentication (mTLS) on outbound wss:// connections")
+	clientKeyFile  = flag.String("client-key", "", "Client key file (PEM) for TLS mutual authentication (mTLS) on outbound wss:// connections")
+	certFile       = flag.String("cert-file", "", "TLS certificate file (PEM) for inbound server mode")
+	keyFile        = flag.String("key-file", "", "TLS key file (PEM) for inbound server mode")
 )
 
 func main() {
@@ -62,15 +67,20 @@ func main() {
 	}
 
 	cfg := agent.Config{
-		Mode:       "outbound",
-		URL:        *connectURL,
-		Addr:       *listenAddr,
-		Token:      tokenVal,
-		Name:       *name,
-		MaxRetries: *maxRetries,
-		BackoffMin: *backoffMin,
-		BackoffMax: *backoffMax,
-		TokenFile:  *tokenFile,
+		Mode:           "outbound",
+		URL:            *connectURL,
+		Addr:           *listenAddr,
+		Token:          tokenVal,
+		CertPath:       *certPath,
+		ClientCertFile: *clientCertFile,
+		ClientKeyFile:  *clientKeyFile,
+		CertFile:       *certFile,
+		KeyFile:        *keyFile,
+		Name:           *name,
+		MaxRetries:     *maxRetries,
+		BackoffMin:     *backoffMin,
+		BackoffMax:     *backoffMax,
+		TokenFile:      *tokenFile,
 	}
 
 	// Ensure the WebSocket URL includes the /ws path the server expects

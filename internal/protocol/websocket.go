@@ -21,8 +21,11 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
-// Dial connects to a remote WebSocket server.
-func Dial(rawURL string, certPath string, token string) (*websocket.Conn, error) {
+// Dial connects to a remote WebSocket server. certPath is the optional CA cert
+// used to verify the server's TLS certificate (for wss:// URLs). When
+// clientCertFile and clientKeyFile are both non-empty they are loaded as a
+// client certificate for TLS mutual authentication.
+func Dial(rawURL string, certPath string, clientCertFile string, clientKeyFile string, token string) (*websocket.Conn, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse url: %w", err)
@@ -37,6 +40,7 @@ func Dial(rawURL string, certPath string, token string) (*websocket.Conn, error)
 		dialer.TLSClientConfig = &tls.Config{
 			MinVersion: tls.VersionTLS13,
 		}
+		// Server certificate verification.
 		if certPath != "" {
 			certPool := x509.NewCertPool()
 			certPEM, err := os.ReadFile(certPath)
@@ -50,6 +54,14 @@ func Dial(rawURL string, certPath string, token string) (*websocket.Conn, error)
 		} else {
 			dialer.TLSClientConfig.InsecureSkipVerify = true
 		}
+		// Client certificate for TLS mutual authentication (mTLS).
+		if clientCertFile != "" && clientKeyFile != "" {
+			cert, err := tls.LoadX509KeyPair(clientCertFile, clientKeyFile)
+			if err != nil {
+				return nil, fmt.Errorf("load client cert: %w", err)
+			}
+			dialer.TLSClientConfig.Certificates = []tls.Certificate{cert}
+		}
 	}
 
 	header := http.Header{}
@@ -61,10 +73,28 @@ func Dial(rawURL string, certPath string, token string) (*websocket.Conn, error)
 	return conn, nil
 }
 
-// Listen starts a WebSocket server.
-func Listen(addr string, certFile string, keyFile string) (*http.Server, *http.ServeMux, error) {
+// Listen starts a WebSocket server. certFile/keyFile are the server's TLS
+// certificate and key (required for TLS). clientCAFile, when non-empty,
+// enables TLS mutual authentication: client certificates are loaded into a
+// pool and tls.RequireAndVerifyClientCert is set so the server rejects any
+// client that does not present a valid certificate signed by the CA.
+func Listen(addr string, certFile string, keyFile string, clientCAFile string) (*http.Server, *http.ServeMux, error) {
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS13,
+	}
+
+	// mTLS: require and verify client certificates when a client CA is provided.
+	if clientCAFile != "" {
+		caCert, err := os.ReadFile(clientCAFile)
+		if err != nil {
+			return nil, nil, fmt.Errorf("read client CA: %w", err)
+		}
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			return nil, nil, fmt.Errorf("failed to parse client CA")
+		}
+		tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+		tlsConfig.ClientCAs = caCertPool
 	}
 
 	if certFile != "" {

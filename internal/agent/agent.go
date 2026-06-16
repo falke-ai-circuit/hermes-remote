@@ -25,19 +25,23 @@ const (
 
 // Config holds agent configuration.
 type Config struct {
-	Mode       string // "outbound", "inbound", "dual"
-	URL        string // wss://host:port for outbound
-	Addr       string // :port for inbound
-	Token      string
-	CertPath   string // CA cert for outbound
-	CertFile   string // TLS cert for inbound
-	KeyFile    string // TLS key for inbound
-	Name       string // optional display name
-	LogPath    string // log file path (empty = stdout)
-	MaxRetries int           // 0 = infinite retries
-	BackoffMin time.Duration // default 1s
-	BackoffMax time.Duration // default 60s
-	TokenFile  string        // path to persist token (empty = no persistence)
+	Mode     string // "outbound", "inbound", "dual"
+	URL      string // wss://host:port for outbound
+	Addr     string // :port for inbound
+	Token    string
+	CertPath string // CA cert for outbound (server verification)
+	// ClientCertFile/ClientKeyFile are an optional client certificate used for
+	// TLS mutual authentication when dialing a wss:// server (mTLS).
+	ClientCertFile string // client cert for mTLS (outbound)
+	ClientKeyFile  string // client key for mTLS (outbound)
+	CertFile       string // TLS cert for inbound
+	KeyFile        string // TLS key for inbound
+	Name           string // optional display name
+	LogPath        string // log file path (empty = stdout)
+	MaxRetries     int           // 0 = infinite retries
+	BackoffMin     time.Duration // default 1s
+	BackoffMax     time.Duration // default 60s
+	TokenFile      string        // path to persist token (empty = no persistence)
 }
 
 // Agent is the remote agent instance.
@@ -86,7 +90,7 @@ func (a *Agent) Run() error {
 func (a *Agent) runOutbound() error {
 	log.Printf("[agent] connecting to %s (mode: outbound)", a.cfg.URL)
 	for {
-		conn, err := protocol.Dial(a.cfg.URL, a.cfg.CertPath, a.cfg.Token)
+		conn, err := protocol.Dial(a.cfg.URL, a.cfg.CertPath, a.cfg.ClientCertFile, a.cfg.ClientKeyFile, a.cfg.Token)
 		if err != nil {
 			a.backoffAttempt++
 			if a.cfg.MaxRetries > 0 && a.backoffAttempt > a.cfg.MaxRetries {
@@ -146,7 +150,7 @@ func (a *Agent) computeBackoff() time.Duration {
 
 func (a *Agent) runInbound() error {
 	log.Printf("[agent] listening on %s (mode: inbound)", a.cfg.Addr)
-	srv, err := protocol.NewServer(a.cfg.Addr, a.cfg.CertFile, a.cfg.KeyFile)
+	srv, err := protocol.NewServer(a.cfg.Addr, a.cfg.CertFile, a.cfg.KeyFile, "")
 	if err != nil {
 		return fmt.Errorf("start server: %w", err)
 	}

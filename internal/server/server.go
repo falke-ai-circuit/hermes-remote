@@ -2,6 +2,8 @@ package server
 
 import (
 	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -39,6 +41,11 @@ type Server struct {
 	srv       *http.Server
 	mux       *http.ServeMux
 
+	// TLS configuration for the server (optional).
+	certFile     string
+	keyFile      string
+	clientCAFile string // optional CA for TLS mutual authentication (mTLS)
+
 	mu        sync.RWMutex
 	conns     map[string]*websocket.Conn // agentID -> conn
 
@@ -74,6 +81,29 @@ func NewServer(addr string, token string, registryPath string) *Server {
 // concurrent).
 func NewServerWithRateLimit(addr string, token string, registryPath string, rlCfg RateLimitConfig) *Server {
 	srv := NewServer(addr, token, registryPath)
+	srv.rateLimit = NewRateLimiter(rlCfg.RatePerSec, rlCfg.Burst, rlCfg.MaxConcurrent)
+	srv.proxy.SetRateLimiter(srv.rateLimit)
+	return srv
+}
+
+// NewServerWithTLS creates a new server configured for TLS. certFile/keyFile
+// are the server's TLS certificate and key. clientCAFile, when non-empty,
+// enables TLS mutual authentication: clients must present a certificate
+// signed by that CA or the TLS handshake is rejected. The returned server is
+// started with StartTLS.
+func NewServerWithTLS(addr string, token string, registryPath string, certFile string, keyFile string, clientCAFile string) *Server {
+	srv := NewServer(addr, token, registryPath)
+	srv.certFile = certFile
+	srv.keyFile = keyFile
+	srv.clientCAFile = clientCAFile
+	return srv
+}
+
+// NewServerWithTLSRateLimit creates a new TLS server with an explicit
+// rate-limit configuration. It is the TLS + rate-limiting combination of
+// NewServerWithRateLimit and NewServerWithTLS.
+func NewServerWithTLSRateLimit(addr string, token string, registryPath string, certFile string, keyFile string, clientCAFile string, rlCfg RateLimitConfig) *Server {
+	srv := NewServerWithTLS(addr, token, registryPath, certFile, keyFile, clientCAFile)
 	srv.rateLimit = NewRateLimiter(rlCfg.RatePerSec, rlCfg.Burst, rlCfg.MaxConcurrent)
 	srv.proxy.SetRateLimiter(srv.rateLimit)
 	return srv
@@ -191,12 +221,41 @@ func (s *Server) Start() error {
 	return s.srv.ListenAndServe()
 }
 
-// StartTLS begins listening with TLS.
+// StartTLS begins listening with TLS. When the server was constructed with a
+// clientCAFile (via NewServerWithTLS), the TLS config requires and verifies
+// client certificates (mTLS). certFile/keyFile override the server's stored
+// cert/key paths when non-empty.
 func (s *Server) StartTLS(certFile, keyFile string) error {
+	if certFile != "" {
+		s.certFile = certFile
+	}
+	if keyFile != "" {
+		s.keyFile = keyFile
+	}
+
 	s.mux = http.NewServeMux()
+
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS13,
+	}
+	// mTLS: require and verify client certificates when a client CA is configured.
+	if s.clientCAFile != "" {
+		caCert, err := os.ReadFile(s.clientCAFile)
+		if err != nil {
+			return fmt.Errorf("read client CA: %w", err)
+		}
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			return fmt.Errorf("failed to parse client CA")
+		}
+		tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+		tlsConfig.ClientCAs = caCertPool
+	}
+
 	s.srv = &http.Server{
-		Addr:    s.addr,
-		Handler: s.mux,
+		Addr:      s.addr,
+		Handler:   s.mux,
+		TLSConfig: tlsConfig,
 	}
 
 	s.mux.HandleFunc("/ws", s.handleWebSocket)
@@ -207,8 +266,12 @@ func (s *Server) StartTLS(certFile, keyFile string) error {
 	// Start proactive token rotation if a TTL was configured.
 	s.StartTokenRotation()
 
-	log.Printf("[server] starting TLS on %s", s.addr)
-	return s.srv.ListenAndServeTLS(certFile, keyFile)
+	mode := "TLS"
+	if s.clientCAFile != "" {
+		mode = "TLS+mTLS"
+	}
+	log.Printf("[server] starting %s on %s", mode, s.addr)
+	return s.srv.ListenAndServeTLS(s.certFile, s.keyFile)
 }
 
 // Close shuts down the server, stops the stale-detector goroutine, and stops
