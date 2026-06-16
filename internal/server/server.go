@@ -223,6 +223,8 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentFSWrite(w, r, agentID)
 	case action == "screenshot" && r.Method == http.MethodPost:
 		s.handleAgentScreenshot(w, r, agentID)
+	case action == "process-list" && r.Method == http.MethodPost:
+		s.handleAgentProcessList(w, r, agentID)
 	default:
 		http.Error(w, "not found", http.StatusNotFound)
 	}
@@ -400,10 +402,12 @@ func (s *Server) handleAgentScreenshot(w http.ResponseWriter, r *http.Request, a
 	}
 
 	// Try import (ImageMagick), fallback to scrot
-	cmd := exec.Command("import", "-window", "root", "-")
+	cmd := exec.Command("import", "-window", "root", "png:-")
+	cmd.Env = os.Environ()
 	out, err := cmd.Output()
 	if err != nil {
 		cmd2 := exec.Command("scrot", "-")
+		cmd2.Env = os.Environ()
 		out, err = cmd2.Output()
 		if err != nil {
 			result := protocol.ScreenshotResult{
@@ -426,6 +430,43 @@ func (s *Server) handleAgentScreenshot(w http.ResponseWriter, r *http.Request, a
 		Data:      base64.StdEncoding.EncodeToString(out),
 		SizeBytes: int64(len(out)),
 	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+// handleAgentProcessList returns the list of running processes on behalf of an agent.
+func (s *Server) handleAgentProcessList(w http.ResponseWriter, r *http.Request, agentID string) {
+	// Use ps for cross-platform compatibility
+	cmd := exec.Command("ps", "-eo", "pid,comm,%cpu,%mem", "--no-headers")
+	cmd.Env = os.Environ()
+	out, err := cmd.Output()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("ps failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	var processes []protocol.ProcessInfo
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+		pid := 0
+		fmt.Sscanf(fields[0], "%d", &pid)
+		cpu := 0.0
+		fmt.Sscanf(fields[2], "%f", &cpu)
+		mem := 0.0
+		fmt.Sscanf(fields[3], "%f", &mem)
+		processes = append(processes, protocol.ProcessInfo{
+			PID:        pid,
+			Name:       fields[1],
+			CPUPercent: cpu,
+			MemoryMB:   mem,
+		})
+	}
+
+	result := protocol.ProcessListResult{Processes: processes}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
 }
