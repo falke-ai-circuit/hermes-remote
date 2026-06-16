@@ -108,7 +108,7 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 - Build + vet + cross-compile (darwin/linux/windows × amd64/arm64) all exit 0
 - `go test ./internal/server/...` passes (6/6)
 
-#### Commit 5: Health Monitoring (`e078bb6`)
+#### Commit 5: Health Monitoring (`4b89328`)
 
 - **Extended `AgentRecord`** (`internal/server/registry.go`) with: `UptimeSeconds` (computed from `ConnectedAt`), `LastError` (omitempty), `ErrorCount`, `HealthScore` (0.0–1.0 composite), `ResourceUsage *ResourceInfo` (omitempty), plus internal non-serialized `connectedAt time.Time` / `lastHeartbeat time.Time` fields (reconstructed from string fields on load via `json:"-"`-style unexported fields)
 - **NEW** `ResourceInfo` struct (registry.go): `CPUPercent`, `MemoryMB`, `DiskFreeMB` — populated from agent `health_result` messages
@@ -166,7 +166,7 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 | 7 | `d16dff3` | feat: Phase E Commit 2 — Windows real PowerShell implementations (6 stubs → real) |
 | 8 | `438ebc7` | feat: Phase E Commit 3 — macOS real implementation (25 functions via native CLI tools) |
 | 9 | `947c306` | feat: Phase E Commit 4 — per-agent token-bucket rate limiter + CLI flags (--rate-limit/--rate-burst/--max-concurrent) |
-| 10 | `e078bb6` | feat: Phase E Commit 5 — health monitoring (AgentRecord extensions, stale detector, RecordError/UpdateHealth/GetHealth, /api/agent/{id}/health, enhanced /health) |
+| 10 | `4b89328` | feat: Phase E Commit 5 — health monitoring (AgentRecord extensions, stale detector, RecordError/UpdateHealth/GetHealth, /api/agent/{id}/health, enhanced /health) |
 
 ### Planned
 - Phase E: Production hardening (TLS mutual auth, token rotation, Windows/macOS real implementations, rate limiting, health monitoring)

@@ -115,7 +115,7 @@
 - 6 unit tests in `internal/server/proxy_test.go` — burst, concurrency cap + Release, token refill, per-agent isolation, proxy Call marker, constructor wiring. All pass.
 - Build + vet + cross-compile (darwin/linux/windows × amd64/arm64) all exit 0
 
-### E5: Health Monitoring ✅ (`e078bb6`)
+### E5: Health Monitoring ✅ (`4b89328`)
 - **Extended `AgentRecord`** with `UptimeSeconds`, `LastError`, `ErrorCount`, `HealthScore` (0.0–1.0), `ResourceUsage *ResourceInfo`; internal `connectedAt`/`lastHeartbeat` `time.Time` fields excluded from JSON
 - **NEW** `ResourceInfo` struct (`CPUPercent`, `MemoryMB`, `DiskFreeMB`) in registry.go; `protocol.HealthResult` extended with optional resource fields
 - **Health score formula** (0.0–1.0): heartbeat recency (0.0–0.4) + error count (0.0–0.3) + uptime stability (0.0–0.3)
