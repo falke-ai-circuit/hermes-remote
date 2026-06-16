@@ -108,6 +108,21 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 - Build + vet + cross-compile (darwin/linux/windows × amd64/arm64) all exit 0
 - `go test ./internal/server/...` passes (6/6)
 
+#### Commit 5: Health Monitoring (`e078bb6`)
+
+- **Extended `AgentRecord`** (`internal/server/registry.go`) with: `UptimeSeconds` (computed from `ConnectedAt`), `LastError` (omitempty), `ErrorCount`, `HealthScore` (0.0–1.0 composite), `ResourceUsage *ResourceInfo` (omitempty), plus internal non-serialized `connectedAt time.Time` / `lastHeartbeat time.Time` fields (reconstructed from string fields on load via `json:"-"`-style unexported fields)
+- **NEW** `ResourceInfo` struct (registry.go): `CPUPercent`, `MemoryMB`, `DiskFreeMB` — populated from agent `health_result` messages
+- **Extended `protocol.HealthResult`** (`internal/protocol/messages.go`) with optional `CPUPercent`/`MemoryMB`/`DiskFreeMB` fields (omitempty) so agents can report resource usage alongside health
+- **Health score formula** (documented in code comment): 0.0–1.0 composite — heartbeat recency (0.0–0.4, decays to 0 after 90s stale threshold) + error count (0.0–0.3, −0.05/error floored at 0) + uptime stability (0.0–0.3, scales over first 5 min)
+- **NEW Registry methods**: `RecordError(agentID, errMsg)` (sets LastError, ++ErrorCount, recomputes score), `UpdateHealth(agentID, ResourceInfo)` (sets ResourceUsage, refreshes heartbeat, un-stales, recomputes score), `GetHealth(agentID) (AgentRecord, error)` (returns full health record with fresh uptime/score), `StartStaleDetector()` (idempotent start), `Stop()` (idempotent stop via `stopCh` + `sync.Once`)
+- **Stale-detector goroutine**: scans every 30s (`staleCheckInterval`) for agents with `LastHeartbeat > 90s` old (`staleThreshold`), marks status `"stale"` and recomputes HealthScore; exits cleanly when `Registry.Stop()` closes `stopCh`. Started automatically in `NewServer`; no goroutine leak (verified: `Close()` calls `Registry.Stop()`)
+- **NEW** `GET /api/agent/{id}/health` endpoint — returns the full `AgentRecord` (with `uptime_seconds`, `health_score`, `status`, `last_error`, `error_count`, `resource_usage`); 404 for unknown agent (verified: `curl` returns `agent <id> not found` with HTTP 404)
+- **Enhanced `/health` endpoint** — now returns `{status, total_agents, active_agents, stale_agents, uptime_seconds}` (was just `{"status":"ok"}`)
+- **Error recording wired into `handleMessages`**: incoming `TypeError` envelopes call `RecordError(agentID, env.Error.Message)`; incoming `TypeHealthResult` envelopes call `UpdateHealth` with extracted `ResourceInfo`
+- Internal time fields (`connectedAt`, `lastHeartbeat`) are unexported and excluded from JSON serialization; reconstructed from the serialized string timestamps on `load()`
+- Zero new external deps (stdlib `log` added for stale-detector logging)
+- Build + vet pass: `go build ./cmd/...` exits 0, `go vet ./...` exits 0, `go test ./...` passes (existing 6/6 rate-limiter tests unaffected)
+
 ### Phase D — Kali Integration Test (2026-06-16)
 
 | Test | Result |
@@ -151,6 +166,7 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 | 7 | `d16dff3` | feat: Phase E Commit 2 — Windows real PowerShell implementations (6 stubs → real) |
 | 8 | `438ebc7` | feat: Phase E Commit 3 — macOS real implementation (25 functions via native CLI tools) |
 | 9 | `947c306` | feat: Phase E Commit 4 — per-agent token-bucket rate limiter + CLI flags (--rate-limit/--rate-burst/--max-concurrent) |
+| 10 | `e078bb6` | feat: Phase E Commit 5 — health monitoring (AgentRecord extensions, stale detector, RecordError/UpdateHealth/GetHealth, /api/agent/{id}/health, enhanced /health) |
 
 ### Planned
 - Phase E: Production hardening (TLS mutual auth, token rotation, Windows/macOS real implementations, rate limiting, health monitoring)

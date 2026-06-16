@@ -3,22 +3,90 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"sync"
 	"time"
 )
 
+// Stale-detection tuning. The background goroutine started by
+// StartStaleDetector scans every staleCheckInterval for agents whose
+// last heartbeat is older than staleThreshold and marks them "stale".
+const (
+	staleCheckInterval = 30 * time.Second
+	staleThreshold     = 90 * time.Second
+)
+
+// ResourceInfo describes an agent's resource usage, typically reported
+// via health_result messages. Zero values mean "not reported".
+type ResourceInfo struct {
+	CPUPercent float64 `json:"cpu_percent"`
+	MemoryMB   float64 `json:"memory_mb"`
+	DiskFreeMB float64 `json:"disk_free_mb"`
+}
+
 // AgentRecord represents a registered agent.
 type AgentRecord struct {
-	AgentID       string `json:"agent_id"`
-	Name          string `json:"name"`
-	Version       string `json:"version"`
-	OS            string `json:"os"`
-	Arch          string `json:"arch"`
-	Mode          string `json:"mode"`
-	ConnectedAt   string `json:"connected_at"`
-	LastHeartbeat string `json:"last_heartbeat"`
-	Status        string `json:"status"` // "active" or "inactive"
+	AgentID       string        `json:"agent_id"`
+	Name          string        `json:"name"`
+	Version       string        `json:"version"`
+	OS            string        `json:"os"`
+	Arch          string        `json:"arch"`
+	Mode          string        `json:"mode"`
+	ConnectedAt   string        `json:"connected_at"`
+	LastHeartbeat string        `json:"last_heartbeat"`
+	Status        string        `json:"status"` // "active", "inactive", "stale", "error"
+	UptimeSeconds int64         `json:"uptime_seconds"`
+	LastError     string        `json:"last_error,omitempty"`
+	ErrorCount    int           `json:"error_count"`
+	HealthScore   float64       `json:"health_score"` // 0.0-1.0 composite
+	ResourceUsage *ResourceInfo `json:"resource_usage,omitempty"`
+
+	// internal — not serialized; parsed from the string fields on load.
+	connectedAt   time.Time `json:"-"`
+	lastHeartbeat time.Time `json:"-"`
+}
+
+// computeHealthScore calculates a 0.0-1.0 composite health score:
+//   - heartbeat recency (0.0–0.4): fresh heartbeat = 0.4, decays linearly
+//     to 0 once the heartbeat is older than staleThreshold (90s)
+//   - error count (0.0–0.3): 0 errors = 0.3, each error subtracts 0.05,
+//     floored at 0
+//   - uptime stability (0.0–0.3): scales linearly from 0 to 0.3 over the
+//     first 5 minutes of uptime, capped at 0.3
+func (rec *AgentRecord) computeHealthScore(now time.Time) float64 {
+	var score float64
+
+	// heartbeat recency (0.0–0.4)
+	if !rec.lastHeartbeat.IsZero() {
+		hbAge := now.Sub(rec.lastHeartbeat)
+		if hbAge <= 0 {
+			score += 0.4
+		} else if hbAge >= staleThreshold {
+			score += 0.0
+		} else {
+			score += 0.4 * (1.0 - float64(hbAge)/float64(staleThreshold))
+		}
+	}
+
+	// error count (0.0–0.3)
+	errPart := 0.3 - float64(rec.ErrorCount)*0.05
+	if errPart < 0 {
+		errPart = 0
+	}
+	score += errPart
+
+	// uptime stability (0.0–0.3)
+	if !rec.connectedAt.IsZero() {
+		uptime := now.Sub(rec.connectedAt)
+		if uptime >= 5*time.Minute {
+			score += 0.3
+		} else if uptime > 0 {
+			score += 0.3 * (float64(uptime) / float64(5*time.Minute))
+		}
+	}
+
+	return score
 }
 
 // Registry holds connected agents and persists them to disk.
@@ -26,6 +94,10 @@ type Registry struct {
 	mu       sync.RWMutex
 	agents   map[string]*AgentRecord
 	savePath string
+
+	stopCh         chan struct{}
+	stopOnce       sync.Once
+	detectorStarted bool
 }
 
 // NewRegistry creates a new agent registry.
@@ -33,6 +105,7 @@ func NewRegistry(savePath string) *Registry {
 	r := &Registry{
 		agents:   make(map[string]*AgentRecord),
 		savePath: savePath,
+		stopCh:   make(chan struct{}),
 	}
 	r.load()
 	return r
@@ -43,27 +116,34 @@ func (r *Registry) Register(agentID, name, version, goos, arch, mode string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := time.Now().UTC()
+	nowStr := now.Format(time.RFC3339)
 	if rec, ok := r.agents[agentID]; ok {
 		rec.Name = name
 		rec.Version = version
 		rec.OS = goos
 		rec.Arch = arch
 		rec.Mode = mode
-		rec.LastHeartbeat = now
+		rec.LastHeartbeat = nowStr
+		rec.lastHeartbeat = now
 		rec.Status = "active"
+		rec.HealthScore = rec.computeHealthScore(now)
 	} else {
-		r.agents[agentID] = &AgentRecord{
+		rec := &AgentRecord{
 			AgentID:       agentID,
 			Name:          name,
 			Version:       version,
 			OS:            goos,
 			Arch:          arch,
 			Mode:          mode,
-			ConnectedAt:   now,
-			LastHeartbeat: now,
+			ConnectedAt:   nowStr,
+			LastHeartbeat: nowStr,
 			Status:        "active",
 		}
+		rec.connectedAt = now
+		rec.lastHeartbeat = now
+		rec.HealthScore = rec.computeHealthScore(now)
+		r.agents[agentID] = rec
 	}
 	r.save()
 }
@@ -73,19 +153,32 @@ func (r *Registry) Unregister(agentID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if rec, ok := r.agents[agentID]; ok {
+		now := time.Now().UTC()
 		rec.Status = "inactive"
-		rec.LastHeartbeat = time.Now().UTC().Format(time.RFC3339)
+		rec.LastHeartbeat = now.Format(time.RFC3339)
+		rec.lastHeartbeat = now
+		rec.HealthScore = rec.computeHealthScore(now)
 		r.save()
 	}
 }
 
-// ListAgents returns a slice of all agent records.
+// ListAgents returns a slice of all agent records with fresh uptime and
+// health scores computed on read.
 func (r *Registry) ListAgents() []AgentRecord {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	now := time.Now()
 	result := make([]AgentRecord, 0, len(r.agents))
 	for _, rec := range r.agents {
-		result = append(result, *rec)
+		snap := *rec // value copy
+		if !snap.connectedAt.IsZero() {
+			snap.UptimeSeconds = int64(now.Sub(snap.connectedAt).Seconds())
+			if snap.UptimeSeconds < 0 {
+				snap.UptimeSeconds = 0
+			}
+		}
+		snap.HealthScore = snap.computeHealthScore(now)
+		result = append(result, snap)
 	}
 	return result
 }
@@ -95,13 +188,127 @@ func (r *Registry) Heartbeat(agentID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if rec, ok := r.agents[agentID]; ok {
-		rec.LastHeartbeat = time.Now().UTC().Format(time.RFC3339)
+		now := time.Now().UTC()
+		rec.LastHeartbeat = now.Format(time.RFC3339)
+		rec.lastHeartbeat = now
 		rec.Status = "active"
+		rec.HealthScore = rec.computeHealthScore(now)
 		r.save()
 	}
 }
 
-// save persists the registry to disk.
+// RecordError records an error for an agent: sets LastError, increments
+// ErrorCount, and decrements HealthScore.
+func (r *Registry) RecordError(agentID string, errMsg string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	rec, ok := r.agents[agentID]
+	if !ok {
+		return
+	}
+	rec.LastError = errMsg
+	rec.ErrorCount++
+	rec.HealthScore = rec.computeHealthScore(time.Now())
+	r.save()
+}
+
+// UpdateHealth updates resource usage for an agent, refreshes the
+// heartbeat (a health report proves the agent is alive), and
+// recalculates HealthScore.
+func (r *Registry) UpdateHealth(agentID string, resource ResourceInfo) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	rec, ok := r.agents[agentID]
+	if !ok {
+		return
+	}
+	now := time.Now().UTC()
+	rec.ResourceUsage = &resource
+	rec.LastHeartbeat = now.Format(time.RFC3339)
+	rec.lastHeartbeat = now
+	if rec.Status == "stale" {
+		rec.Status = "active"
+	}
+	rec.HealthScore = rec.computeHealthScore(now)
+	r.save()
+}
+
+// GetHealth returns the full health record for an agent, recomputing
+// uptime and health score on read.
+func (r *Registry) GetHealth(agentID string) (AgentRecord, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	rec, ok := r.agents[agentID]
+	if !ok {
+		return AgentRecord{}, fmt.Errorf("agent %s not found", agentID)
+	}
+	now := time.Now()
+	if !rec.connectedAt.IsZero() {
+		rec.UptimeSeconds = int64(now.Sub(rec.connectedAt).Seconds())
+		if rec.UptimeSeconds < 0 {
+			rec.UptimeSeconds = 0
+		}
+	}
+	rec.HealthScore = rec.computeHealthScore(now)
+	return *rec, nil
+}
+
+// StartStaleDetector starts a background goroutine that marks agents
+// "stale" when their last heartbeat exceeds staleThreshold (90s). It
+// scans every staleCheckInterval (30s). Safe to call once; additional
+// calls are no-ops.
+func (r *Registry) StartStaleDetector() {
+	r.mu.Lock()
+	if r.detectorStarted {
+		r.mu.Unlock()
+		return
+	}
+	r.detectorStarted = true
+	r.mu.Unlock()
+	go r.runStaleDetector()
+}
+
+// runStaleDetector is the background loop. It exits when stopCh is closed.
+func (r *Registry) runStaleDetector() {
+	ticker := time.NewTicker(staleCheckInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			r.checkStale()
+		case <-r.stopCh:
+			return
+		}
+	}
+}
+
+// checkStale marks active agents with stale heartbeats as "stale".
+func (r *Registry) checkStale() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := time.Now()
+	changed := false
+	for id, rec := range r.agents {
+		if rec.Status == "active" && !rec.lastHeartbeat.IsZero() && now.Sub(rec.lastHeartbeat) > staleThreshold {
+			rec.Status = "stale"
+			rec.HealthScore = rec.computeHealthScore(now)
+			log.Printf("[registry] agent %s marked stale (no heartbeat for %v)", id, now.Sub(rec.lastHeartbeat).Round(time.Second))
+			changed = true
+		}
+	}
+	if changed {
+		r.save()
+	}
+}
+
+// Stop halts the stale-detector goroutine. Safe to call multiple times.
+func (r *Registry) Stop() {
+	r.stopOnce.Do(func() {
+		close(r.stopCh)
+	})
+}
+
+// save persists the registry to disk. Caller must hold mu.
 func (r *Registry) save() {
 	if r.savePath == "" {
 		return
@@ -126,7 +333,8 @@ func (r *Registry) save() {
 	}
 }
 
-// load reads the registry from disk.
+// load reads the registry from disk and reconstructs internal time fields
+// from the serialized string timestamps.
 func (r *Registry) load() {
 	data, err := os.ReadFile(r.savePath)
 	if err != nil {
@@ -138,4 +346,17 @@ func (r *Registry) load() {
 		return
 	}
 	r.agents = agents
+	// Reconstruct internal time.Time fields from the serialized strings.
+	for _, rec := range r.agents {
+		if rec.ConnectedAt != "" {
+			if t, err := time.Parse(time.RFC3339, rec.ConnectedAt); err == nil {
+				rec.connectedAt = t
+			}
+		}
+		if rec.LastHeartbeat != "" {
+			if t, err := time.Parse(time.RFC3339, rec.LastHeartbeat); err == nil {
+				rec.lastHeartbeat = t
+			}
+		}
+	}
 }

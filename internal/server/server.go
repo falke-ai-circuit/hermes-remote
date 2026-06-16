@@ -41,9 +41,13 @@ type Server struct {
 	conns     map[string]*websocket.Conn // agentID -> conn
 }
 
+// startTime records when the server process began, used by /health for uptime.
+var startTime = time.Now()
+
 // NewServer creates a new server.
 func NewServer(addr string, token string, registryPath string) *Server {
 	reg := NewRegistry(registryPath)
+	reg.StartStaleDetector()
 	return &Server{
 		addr:     addr,
 		token:    token,
@@ -104,8 +108,9 @@ func (s *Server) StartTLS(certFile, keyFile string) error {
 	return s.srv.ListenAndServeTLS(certFile, keyFile)
 }
 
-// Close shuts down the server.
+// Close shuts down the server and stops the stale-detector goroutine.
 func (s *Server) Close() error {
+	s.registry.Stop()
 	if s.srv != nil {
 		return s.srv.Close()
 	}
@@ -201,6 +206,24 @@ func (s *Server) handleMessages(agentID string, conn *websocket.Conn) {
 		case protocol.TypePong:
 			s.registry.Heartbeat(agentID)
 
+		case protocol.TypeHealthResult:
+			// Agent reported health; update resource usage and refresh heartbeat.
+			if env.Result != nil {
+				var hr protocol.HealthResult
+				if err := json.Unmarshal(env.Result, &hr); err == nil {
+					s.registry.UpdateHealth(agentID, ResourceInfo{
+						CPUPercent: hr.CPUPercent,
+						MemoryMB:   hr.MemoryMB,
+						DiskFreeMB: hr.DiskFreeMB,
+					})
+				}
+			}
+
+		case protocol.TypeError:
+			if env.Error != nil {
+				s.registry.RecordError(agentID, env.Error.Message)
+			}
+
 		default:
 			// Store results in session context if relevant
 			s.sessions.AddMemory(agentID, "last_msg_type", env.Type)
@@ -246,6 +269,8 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentScreenshot(w, r, agentID)
 	case action == "process-list" && r.Method == http.MethodPost:
 		s.handleAgentProcessList(w, r, agentID)
+	case action == "health" && r.Method == http.MethodGet:
+		s.handleAgentHealth(w, r, agentID)
 	default:
 		http.Error(w, "not found", http.StatusNotFound)
 	}
@@ -492,8 +517,38 @@ func (s *Server) handleAgentProcessList(w http.ResponseWriter, r *http.Request, 
 	json.NewEncoder(w).Encode(result)
 }
 
-// handleHealth returns a simple health check.
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+// handleAgentHealth returns the full health record for a single agent.
+func (s *Server) handleAgentHealth(w http.ResponseWriter, r *http.Request, agentID string) {
+	rec, err := s.registry.GetHealth(agentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status":"ok"}`))
+	json.NewEncoder(w).Encode(rec)
+}
+
+// handleHealth returns a server health check with per-server stats.
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	agents := s.registry.ListAgents()
+	total := len(agents)
+	active := 0
+	stale := 0
+	for _, a := range agents {
+		switch a.Status {
+		case "active":
+			active++
+		case "stale":
+			stale++
+		}
+	}
+	resp := map[string]interface{}{
+		"status":        "ok",
+		"total_agents":  total,
+		"active_agents": active,
+		"stale_agents":  stale,
+		"uptime_seconds": int64(time.Since(startTime).Seconds()),
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }

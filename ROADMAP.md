@@ -80,7 +80,7 @@
 
 **10/10 PASS.** 3 bugs found and fixed during testing (screenshot env, process-list route, --addr flag).
 
-## Phase E — Production Hardening ⏳ (Commit 4/4 complete)
+## Phase E — Production Hardening ⏳ (Commit 5/5 complete)
 
 ### E1: Reconnect Hardening ✅ (`a0a20fd`)
 - Exponential backoff + jitter in `runOutbound()` (replaces fixed 5s)
@@ -115,10 +115,20 @@
 - 6 unit tests in `internal/server/proxy_test.go` — burst, concurrency cap + Release, token refill, per-agent isolation, proxy Call marker, constructor wiring. All pass.
 - Build + vet + cross-compile (darwin/linux/windows × amd64/arm64) all exit 0
 
-### E5: Remaining
+### E5: Health Monitoring ✅ (`e078bb6`)
+- **Extended `AgentRecord`** with `UptimeSeconds`, `LastError`, `ErrorCount`, `HealthScore` (0.0–1.0), `ResourceUsage *ResourceInfo`; internal `connectedAt`/`lastHeartbeat` `time.Time` fields excluded from JSON
+- **NEW** `ResourceInfo` struct (`CPUPercent`, `MemoryMB`, `DiskFreeMB`) in registry.go; `protocol.HealthResult` extended with optional resource fields
+- **Health score formula** (0.0–1.0): heartbeat recency (0.0–0.4) + error count (0.0–0.3) + uptime stability (0.0–0.3)
+- **NEW Registry methods**: `RecordError`, `UpdateHealth`, `GetHealth`, `StartStaleDetector` (idempotent), `Stop` (idempotent, closes `stopCh`)
+- **Stale-detector goroutine**: scans every 30s, marks agents with heartbeat > 90s as `"stale"`; started in `NewServer`, stopped in `Close` (no goroutine leak)
+- **NEW** `GET /api/agent/{id}/health` — full `AgentRecord` with health fields; 404 for unknown agent
+- **Enhanced `/health`** — `{status, total_agents, active_agents, stale_agents, uptime_seconds}`
+- **Error recording wired** into `handleMessages` (`TypeError` → `RecordError`, `TypeHealthResult` → `UpdateHealth`)
+- Zero new external deps (stdlib `log` only). Build + vet + tests pass (`go test ./...`)
+
+### E6: Remaining
 - TLS mutual authentication (client certs)
 - Token rotation (expiring tokens, refresh flow)
-- Agent health monitoring + alerting
 
 ## Phase F — Final Review + Release ⏳
 
@@ -140,7 +150,7 @@
 | B | 1-2 turns (parallel) | ✅ Complete |
 | C | 1 turn | ✅ Complete |
 | D | 1 turn | ✅ Complete — Kali Linux (100.78.148.26) |
-| E | 1-2 turns | ⏳ In Progress — Commit 4/4 complete (reconnect hardening + Windows real + macOS real + rate limiting) |
+| E | 1-2 turns | ⏳ In Progress — Commit 5/5 complete (reconnect hardening + Windows real + macOS real + rate limiting + health monitoring) |
 | F | 1 turn | ⏳ Pending |
 
 **v0.1.0-a0 delivered: 3 commits, 2 binaries, 5 remote tools, 8 bugs fixed. Ready for Phase D integration test.**

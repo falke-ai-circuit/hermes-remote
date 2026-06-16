@@ -1,7 +1,7 @@
 {
   "project": "hermes-remote",
   "version": "v0.1.0-a0",
-  "last_updated": "2026-06-16T22:00:00Z",
+  "last_updated": "2026-06-16T23:30:00Z",
   "hot_cache": [
     {
       "key": "module_path",
@@ -86,12 +86,17 @@
     {
       "key": "phase_e_status",
       "value": "in_progress",
-      "note": "Commit 4/4 complete: reconnect hardening (a0a20fd) + Windows real PowerShell (d16dff3) + macOS real (438ebc7) + rate limiting (Commit 4). Remaining: TLS mutual auth, token rotation, health monitoring."
+      "note": "Commit 5/5 complete: reconnect hardening (a0a20fd) + Windows real PowerShell (d16dff3) + macOS real (438ebc7) + rate limiting (Commit 4) + health monitoring (Commit 5). Remaining: TLS mutual auth, token rotation."
     },
     {
       "key": "rate_limiting",
       "value": "token-bucket per-agent",
       "note": "Phase E Commit 4: RateLimiter in internal/server/proxy.go (stdlib sync+time only). Per-agent tokenBucket map, Allow(agentID)/Release(), defaults 10 req/s burst 20 max 5 concurrent. LLMProxy.Call signature changed to Call(agentID, prompt); returns provider 'rate_limited' when denied. Server gains rateLimit field + NewServerWithRateLimit(addr,token,registry,RateLimitConfig). CLI flags: --rate-limit (10), --rate-burst (20), --max-concurrent (5). 6 unit tests in proxy_test.go all pass. Zero new deps."
+    },
+    {
+      "key": "health_monitoring",
+      "value": "AgentRecord extensions + stale detector",
+      "note": "Phase E Commit 5: Extended AgentRecord with UptimeSeconds, LastError, ErrorCount, HealthScore (0.0-1.0 composite), ResourceUsage *ResourceInfo. NEW ResourceInfo struct (CPUPercent/MemoryMB/DiskFreeMB). Health score formula: heartbeat recency (0.0-0.4) + error count (0.0-0.3) + uptime stability (0.0-0.3). NEW Registry methods: RecordError, UpdateHealth, GetHealth, StartStaleDetector (idempotent), Stop (idempotent via stopCh+sync.Once). Stale detector goroutine scans every 30s, marks agents with heartbeat > 90s as 'stale'. Started in NewServer, stopped in Close (no leak). NEW GET /api/agent/{id}/health endpoint (404 for unknown). Enhanced /health returns {status,total_agents,active_agents,stale_agents,uptime_seconds}. Error recording wired into handleMessages (TypeError→RecordError, TypeHealthResult→UpdateHealth). Internal connectedAt/lastHeartbeat time.Time fields excluded from JSON, reconstructed from string fields on load. Zero new deps. Build+vet+tests pass."
     },
     {
       "key": "windows_platform_status",
@@ -218,9 +223,35 @@
       "rule": "LLMProxy.Call signature changed to Call(agentID, prompt) in Phase E Commit 4",
       "detail": "Phase E Commit 4 added per-agent rate limiting. LLMProxy.Call now takes agentID as its first argument for per-agent token-bucket limiting. Any caller still using the old Call(prompt) signature will fail to compile. NewLLMProxy() still works unchanged (it creates a default RateLimiter). Use NewServerWithRateLimit(addr, token, registry, RateLimitConfig) to configure limits from CLI flags; NewServer(addr, token, registry) uses proxy defaults (10 req/s, burst 20, max 5 concurrent).",
       "affected": ["internal/server/proxy.go", "internal/server/server.go", "cmd/server/main.go"]
+    },
+    {
+      "id": "HR-013",
+      "rule": "AgentRecord has unexported time.Time fields excluded from JSON serialization",
+      "detail": "Phase E Commit 5 extended AgentRecord with internal connectedAt time.Time and lastHeartbeat time.Time fields (json:\"-\"-style via unexported fields). These are NOT serialized to JSON; they are reconstructed from the exported string fields (ConnectedAt, LastHeartbeat, both RFC3339) in Registry.load(). Any code that constructs an AgentRecord literal without setting connectedAt/lastHeartbeat will have zero-time internal fields, so computeHealthScore and ListAgents' uptime computation will return 0 — always use Registry.Register/Heartbeat/UpdateHealth which set both the string and internal fields together. The /api/agent/{id}/health endpoint and ListAgents recompute UptimeSeconds + HealthScore on read from these internal fields.",
+      "affected": ["internal/server/registry.go", "internal/server/server.go"]
+    },
+    {
+      "id": "HR-014",
+      "rule": "Stale-detector goroutine is started in NewServer and must be stopped via Registry.Stop()",
+      "detail": "Phase E Commit 5 adds a background goroutine in Registry.runStaleDetector() that scans every 30s (staleCheckInterval) for agents with LastHeartbeat > 90s old (staleThreshold) and marks them 'stale'. It is started automatically by NewServer via reg.StartStaleDetector(). To avoid a goroutine leak, Server.Close() calls s.registry.Stop() which closes stopCh (idempotent via sync.Once). Any code that constructs a Registry directly (outside NewServer) and wants stale detection must call StartStaleDetector() explicitly; Stop() is safe to call even if StartStaleDetector was never called.",
+      "affected": ["internal/server/registry.go", "internal/server/server.go"]
     }
   ],
   "recent_changes": [
+    {
+      "version": "v0.1.0-a0",
+      "date": "2026-06-16",
+      "summary": "Phase E Commit 5: Health Monitoring — extended AgentRecord with UptimeSeconds/LastError/ErrorCount/HealthScore/ResourceUsage + internal non-serialized time.Time fields. NEW ResourceInfo struct (CPUPercent/MemoryMB/DiskFreeMB). Health score formula (0.0-1.0): heartbeat recency (0.0-0.4) + error count (0.0-0.3) + uptime stability (0.0-0.3). NEW Registry methods: RecordError, UpdateHealth, GetHealth, StartStaleDetector (idempotent), Stop (idempotent via stopCh+sync.Once). Stale detector goroutine scans every 30s, marks heartbeat > 90s as 'stale'; started in NewServer, stopped in Close (no leak). NEW GET /api/agent/{id}/health endpoint (404 for unknown). Enhanced /health returns {status,total_agents,active_agents,stale_agents,uptime_seconds}. Error recording wired into handleMessages (TypeError→RecordError, TypeHealthResult→UpdateHealth with ResourceInfo). protocol.HealthResult extended with optional resource fields. Zero new deps. Build+vet+tests pass. Added gotchas HR-013, HR-014.",
+      "files": [
+        "internal/server/registry.go",
+        "internal/server/server.go",
+        "internal/protocol/messages.go",
+        "CHANGELOG.md",
+        "ROADMAP.md",
+        "project_knowledge.json",
+        "BLUEPRINT.md"
+      ]
+    },
     {
       "version": "v0.1.0-a0",
       "date": "2026-06-16",

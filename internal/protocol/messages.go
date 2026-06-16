@@ -236,13 +236,17 @@ type InputResult struct {
 }
 
 type HealthResult struct {
-	AgentVersion   string `json:"agent_version"`
-	Hostname       string `json:"hostname"`
-	OS             string `json:"os"`
-	Arch           string `json:"arch"`
-	UptimeSeconds  int64  `json:"uptime_seconds"`
-	Mode           string `json:"mode"`
-	ConnectedSince string `json:"connected_since"`
+	AgentVersion   string  `json:"agent_version"`
+	Hostname       string  `json:"hostname"`
+	OS             string  `json:"os"`
+	Arch           string  `json:"arch"`
+	UptimeSeconds  int64   `json:"uptime_seconds"`
+	Mode           string  `json:"mode"`
+	ConnectedSince string  `json:"connected_since"`
+	// Resource usage (populated by agents that report it; zero = not reported).
+	CPUPercent float64 `json:"cpu_percent,omitempty"`
+	MemoryMB   float64 `json:"memory_mb,omitempty"`
+	DiskFreeMB float64 `json:"disk_free_mb,omitempty"`
 }
 
 type ProcessInfo struct {
