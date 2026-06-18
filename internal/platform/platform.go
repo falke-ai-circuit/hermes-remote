@@ -22,7 +22,7 @@ type Platform interface {
 	Mkdir(path string) (protocol.FSMkdirResult, error)
 
 	// Shell
-	Exec(command string, timeout int, workDir string, env map[string]string) (protocol.ShellResult, error)
+	Exec(command string, timeout int, workDir string, env map[string]string) (protocol.ExecResult, error)
 
 	// Screen (stubs for now)
 	Screenshot(display int, quality int) (protocol.ScreenshotResult, error)
@@ -116,10 +116,10 @@ func BaseClipboardSet(text string) error {
 	return fmt.Errorf("clipboard not implemented on %s", runtime.GOOS)
 }
 
-func ExecCommand(command string, timeoutSec int, workDir string, env map[string]string) (protocol.ShellResult, error) {
+func ExecCommand(command string, timeoutSec int, workDir string, env map[string]string) (protocol.ExecResult, error) {
 	// Generic exec using os/exec
 	// To be overridden by platform-specific implementations
-	return protocol.ShellResult{
+	return protocol.ExecResult{
 		Stdout:   "",
 		Stderr:   fmt.Sprintf("shell not implemented on %s/%s", runtime.GOOS, runtime.GOARCH),
 		ExitCode: -1,
@@ -253,7 +253,7 @@ func (p *genericPlatform) Mkdir(path string) (protocol.FSMkdirResult, error) {
 	return protocol.FSMkdirResult{Created: true, Path: path}, nil
 }
 
-func (p *genericPlatform) Exec(command string, timeout int, workDir string, env map[string]string) (protocol.ShellResult, error) {
+func (p *genericPlatform) Exec(command string, timeout int, workDir string, env map[string]string) (protocol.ExecResult, error) {
 	return ExecCommand(command, timeout, workDir, env)
 }
 

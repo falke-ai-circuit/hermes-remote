@@ -256,7 +256,7 @@ func (a *Agent) handleConnection(conn *websocket.Conn) {
 				log.Printf("token nearing expiry (%v), requesting refresh", expiry)
 				refreshEnv := protocol.Envelope{
 					ID:   fmt.Sprintf("token-refresh-%d", time.Now().UnixMilli()),
-					Type: protocol.TypeTokenRefresh,
+					Type: protocol.TypeAuthRequest,
 				}
 				if err := protocol.WriteMessage(conn, refreshEnv); err != nil {
 					log.Printf("token refresh request failed: %v", err)
@@ -271,9 +271,9 @@ func (a *Agent) handleCommand(conn *websocket.Conn, env protocol.Envelope) {
 	switch env.Type {
 	case protocol.TypePing:
 		resp = protocol.NewPong(env.ID)
-	case "shell":
-		resp = a.handleShell(env)
-	case "shell_pty":
+	case "exec":
+		resp = a.handleExec(env)
+	case "exec_pty":
 		resp = a.handleShellPTY(env)
 	case "fs_list":
 		resp = a.handleFSList(env)
@@ -281,41 +281,41 @@ func (a *Agent) handleCommand(conn *websocket.Conn, env protocol.Envelope) {
 		resp = a.handleFSStat(env)
 	case "fs_read":
 		resp = a.handleFSRead(env)
-	case "fs_write":
+	case "file_save":
 		resp = a.handleFSWrite(env)
-	case "fs_delete":
+	case "file_remove":
 		resp = a.handleFSDelete(env)
 	case "fs_move":
 		resp = a.handleFSMove(env)
 	case "fs_mkdir":
 		resp = a.handleFSMkdir(env)
-	case "screenshot":
-		resp = a.handleScreenshot(env)
-	case "screen_info":
-		resp = a.handleScreenInfo(env)
-	case "click":
+	case "capture":
+		resp = a.handleCapture(env)
+	case "display_info":
+		resp = a.handleDisplayInfo(env)
+	case "pointer_click":
 		resp = a.handleClick(env)
-	case "type":
+	case "text_input":
 		resp = a.handleType(env)
-	case "key":
+	case "keypress":
 		resp = a.handleKey(env)
-	case "hotkey":
+	case "keycombo":
 		resp = a.handleHotkey(env)
 	case "health":
 		resp = a.handleHealth(env)
-	case "process_list":
-		resp = a.handleProcessList(env)
-	case "process_kill":
-		resp = a.handleProcessKill(env)
-	case "open_url":
-		resp = a.handleOpenURL(env)
+	case "task_list":
+		resp = a.handleTaskList(env)
+	case "task_stop":
+		resp = a.handleTaskStop(env)
+	case "open_link":
+		resp = a.handleOpenLink(env)
 	case "notify":
 		resp = a.handleNotify(env)
-	case "clipboard_get":
-		resp = a.handleClipboardGet(env)
-	case "clipboard_set":
-		resp = a.handleClipboardSet(env)
-	case "token_rotate":
+	case "clipboard_read":
+		resp = a.handleClipboardRead(env)
+	case "clipboard_write":
+		resp = a.handleClipboardWrite(env)
+	case "auth_refresh":
 		resp = a.handleTokenRotate(env)
 	default:
 		resp = protocol.NewError(env.ID, protocol.ErrInvalidParams, fmt.Sprintf("unknown command: %s", env.Type))
@@ -325,8 +325,8 @@ func (a *Agent) handleCommand(conn *websocket.Conn, env protocol.Envelope) {
 	}
 }
 
-func (a *Agent) handleShell(env protocol.Envelope) protocol.Envelope {
-	params, err := protocol.ParseCommand[protocol.ShellParams](env)
+func (a *Agent) handleExec(env protocol.Envelope) protocol.Envelope {
+	params, err := protocol.ParseCommand[protocol.ExecParams](env)
 	if err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInvalidParams, err.Error())
 	}
@@ -342,14 +342,14 @@ func (a *Agent) handleShell(env protocol.Envelope) protocol.Envelope {
 		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
 	}
 	result.DurationMs = time.Since(start).Milliseconds()
-	return protocol.NewResult(env.ID, protocol.TypeShellResult, result)
+	return protocol.NewResult(env.ID, protocol.TypeExecResult, result)
 }
 
 func (a *Agent) handleShellPTY(env protocol.Envelope) protocol.Envelope {
-	return a.handleShell(env)
+	return a.handleExec(env)
 }
 
-// --- command handlers for all 25 protocol commands ---
+// --- command handlers for all protocol commands ---
 
 func (a *Agent) handleFSList(env protocol.Envelope) protocol.Envelope {
 	params, err := protocol.ParseCommand[protocol.FSParams](env)
@@ -400,7 +400,7 @@ func (a *Agent) handleFSWrite(env protocol.Envelope) protocol.Envelope {
 	if err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
 	}
-	return protocol.NewResult(env.ID, protocol.TypeFSWriteResult, result)
+	return protocol.NewResult(env.ID, protocol.TypeFileSaveResult, result)
 }
 
 func (a *Agent) handleFSDelete(env protocol.Envelope) protocol.Envelope {
@@ -412,7 +412,7 @@ func (a *Agent) handleFSDelete(env protocol.Envelope) protocol.Envelope {
 	if err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
 	}
-	return protocol.NewResult(env.ID, protocol.TypeFSDeleteResult, result)
+	return protocol.NewResult(env.ID, protocol.TypeFileRemoveResult, result)
 }
 
 func (a *Agent) handleFSMove(env protocol.Envelope) protocol.Envelope {
@@ -439,7 +439,7 @@ func (a *Agent) handleFSMkdir(env protocol.Envelope) protocol.Envelope {
 	return protocol.NewResult(env.ID, protocol.TypeFSMkdirResult, result)
 }
 
-func (a *Agent) handleScreenshot(env protocol.Envelope) protocol.Envelope {
+func (a *Agent) handleCapture(env protocol.Envelope) protocol.Envelope {
 	params, err := protocol.ParseCommand[protocol.ScreenParams](env)
 	if err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInvalidParams, err.Error())
@@ -448,11 +448,11 @@ func (a *Agent) handleScreenshot(env protocol.Envelope) protocol.Envelope {
 	if err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
 	}
-	return protocol.NewResult(env.ID, protocol.TypeScreenshotResult, result)
+	return protocol.NewResult(env.ID, protocol.TypeCaptureResult, result)
 }
 
-func (a *Agent) handleScreenInfo(env protocol.Envelope) protocol.Envelope {
-	return protocol.NewResult(env.ID, protocol.TypeScreenInfoResult, a.plat.ScreenInfo())
+func (a *Agent) handleDisplayInfo(env protocol.Envelope) protocol.Envelope {
+	return protocol.NewResult(env.ID, protocol.TypeDisplayInfoResult, a.plat.ScreenInfo())
 }
 
 func (a *Agent) handleClick(env protocol.Envelope) protocol.Envelope {
@@ -463,7 +463,7 @@ func (a *Agent) handleClick(env protocol.Envelope) protocol.Envelope {
 	if err := a.plat.Click(params.X, params.Y, params.Button); err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
 	}
-	return protocol.NewResult(env.ID, protocol.TypeClickResult, protocol.InputResult{Success: true})
+	return protocol.NewResult(env.ID, protocol.TypePointerClickResult, protocol.InputResult{Success: true})
 }
 
 func (a *Agent) handleType(env protocol.Envelope) protocol.Envelope {
@@ -474,7 +474,7 @@ func (a *Agent) handleType(env protocol.Envelope) protocol.Envelope {
 	if err := a.plat.TypeText(params.Text); err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
 	}
-	return protocol.NewResult(env.ID, protocol.TypeTypeResult, protocol.InputResult{Success: true})
+	return protocol.NewResult(env.ID, protocol.TypeTextInputResult, protocol.InputResult{Success: true})
 }
 
 func (a *Agent) handleKey(env protocol.Envelope) protocol.Envelope {
@@ -485,7 +485,7 @@ func (a *Agent) handleKey(env protocol.Envelope) protocol.Envelope {
 	if err := a.plat.KeyPress(params.Key); err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
 	}
-	return protocol.NewResult(env.ID, protocol.TypeKeyResult, protocol.InputResult{Success: true})
+	return protocol.NewResult(env.ID, protocol.TypeKeyPressResult, protocol.InputResult{Success: true})
 }
 
 func (a *Agent) handleHotkey(env protocol.Envelope) protocol.Envelope {
@@ -496,33 +496,33 @@ func (a *Agent) handleHotkey(env protocol.Envelope) protocol.Envelope {
 	if err := a.plat.Hotkey(params.Keys); err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
 	}
-	return protocol.NewResult(env.ID, protocol.TypeHotkeyResult, protocol.InputResult{Success: true})
+	return protocol.NewResult(env.ID, protocol.TypeKeyComboResult, protocol.InputResult{Success: true})
 }
 
 func (a *Agent) handleHealth(env protocol.Envelope) protocol.Envelope {
 	return protocol.NewResult(env.ID, protocol.TypeHealthResult, a.plat.Health(a.cfg.Mode))
 }
 
-func (a *Agent) handleProcessList(env protocol.Envelope) protocol.Envelope {
+func (a *Agent) handleTaskList(env protocol.Envelope) protocol.Envelope {
 	procs, err := a.plat.ProcessList()
 	if err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
 	}
-	return protocol.NewResult(env.ID, protocol.TypeProcessListResult, protocol.ProcessListResult{Processes: procs})
+	return protocol.NewResult(env.ID, protocol.TypeTaskListResult, protocol.ProcessListResult{Processes: procs})
 }
 
-func (a *Agent) handleProcessKill(env protocol.Envelope) protocol.Envelope {
-	params, err := protocol.ParseCommand[protocol.ProcessKillParams](env)
+func (a *Agent) handleTaskStop(env protocol.Envelope) protocol.Envelope {
+	params, err := protocol.ParseCommand[protocol.TaskStopParams](env)
 	if err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInvalidParams, err.Error())
 	}
 	if err := a.plat.ProcessKill(params.PID, params.Signal); err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
 	}
-	return protocol.NewResult(env.ID, protocol.TypeProcessKillResult, protocol.ProcessKillResult{Killed: true, PID: params.PID})
+	return protocol.NewResult(env.ID, protocol.TypeTaskStopResult, protocol.TaskStopResult{Killed: true, PID: params.PID})
 }
 
-func (a *Agent) handleOpenURL(env protocol.Envelope) protocol.Envelope {
+func (a *Agent) handleOpenLink(env protocol.Envelope) protocol.Envelope {
 	params, err := protocol.ParseCommand[protocol.OpenURLParams](env)
 	if err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInvalidParams, err.Error())
@@ -530,7 +530,7 @@ func (a *Agent) handleOpenURL(env protocol.Envelope) protocol.Envelope {
 	if err := a.plat.OpenURL(params.URL); err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
 	}
-	return protocol.NewResult(env.ID, protocol.TypeOpenURLResult, protocol.InputResult{Success: true})
+	return protocol.NewResult(env.ID, protocol.TypeOpenLinkResult, protocol.InputResult{Success: true})
 }
 
 func (a *Agent) handleNotify(env protocol.Envelope) protocol.Envelope {
@@ -544,23 +544,23 @@ func (a *Agent) handleNotify(env protocol.Envelope) protocol.Envelope {
 	return protocol.NewResult(env.ID, protocol.TypeNotifyResult, protocol.InputResult{Success: true})
 }
 
-func (a *Agent) handleClipboardGet(env protocol.Envelope) protocol.Envelope {
+func (a *Agent) handleClipboardRead(env protocol.Envelope) protocol.Envelope {
 	text, err := a.plat.ClipboardGet()
 	if err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
 	}
-	return protocol.NewResult(env.ID, protocol.TypeClipboardGetResult, protocol.ClipboardResult{Text: text})
+	return protocol.NewResult(env.ID, protocol.TypeClipboardReadResult, protocol.ClipboardResult{Text: text})
 }
 
-func (a *Agent) handleClipboardSet(env protocol.Envelope) protocol.Envelope {
-	params, err := protocol.ParseCommand[protocol.ClipboardSetParams](env)
+func (a *Agent) handleClipboardWrite(env protocol.Envelope) protocol.Envelope {
+	params, err := protocol.ParseCommand[protocol.ClipboardWriteParams](env)
 	if err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInvalidParams, err.Error())
 	}
 	if err := a.plat.ClipboardSet(params.Text); err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
 	}
-	return protocol.NewResult(env.ID, protocol.TypeClipboardSetResult, protocol.InputResult{Success: true})
+	return protocol.NewResult(env.ID, protocol.TypeClipboardWriteResult, protocol.InputResult{Success: true})
 }
 
 func (a *Agent) handleTokenRotate(env protocol.Envelope) protocol.Envelope {
@@ -583,7 +583,7 @@ func (a *Agent) handleTokenRotate(env protocol.Envelope) protocol.Envelope {
 	}
 
 	log.Printf("Token rotated successfully.")
-	return protocol.NewResult(env.ID, protocol.TypeTokenRotateResult, protocol.TokenRotateResult{
+	return protocol.NewResult(env.ID, protocol.TypeAuthRefreshResult, protocol.TokenRotateResult{
 		Rotated:  true,
 		NewToken: params.NewToken,
 	})
@@ -662,7 +662,7 @@ func decodeBase64(s string) ([]byte, error) {
 	return result, nil
 }
 
-// SendPrompt sends a shell command to the connected server and displays results.
+// SendPrompt sends an exec command to the connected server and displays results.
 func (a *Agent) SendPrompt(prompt string) {
 	a.mu.Lock()
 	conn := a.conn
@@ -673,8 +673,8 @@ func (a *Agent) SendPrompt(prompt string) {
 	}
 	env := protocol.Envelope{
 		ID:   fmt.Sprintf("prompt-%d", time.Now().UnixMilli()),
-		Type: "shell",
-		Params: mustMarshal(protocol.ShellParams{
+		Type: protocol.TypeExec,
+		Params: mustMarshal(protocol.ExecParams{
 			Command: prompt,
 			Timeout: defaultTimeout,
 		}),

@@ -422,7 +422,7 @@ func (s *Server) handleMessages(agentID string, conn *websocket.Conn) {
 				s.registry.RecordError(agentID, env.Error.Message)
 			}
 
-		case protocol.TypeTokenRotateResult:
+		case protocol.TypeAuthRefreshResult:
 			// Agent confirmed it applied a rotated token. Record the event and
 			// schedule the next expiry from now (relative to the new token).
 			var result protocol.TokenRotateResult
@@ -435,7 +435,7 @@ func (s *Server) handleMessages(agentID string, conn *websocket.Conn) {
 				s.SetTokenExpiry(agentID, time.Now().Add(s.tokenTTL))
 			}
 
-		case protocol.TypeTokenRefresh:
+		case protocol.TypeAuthRequest:
 			// Agent requested a proactive token refresh (its token is nearing
 			// expiry). Generate a new token and send it back.
 			newToken := generateToken()
@@ -476,7 +476,7 @@ func (s *Server) InitiateTokenRotation(agentID string, newToken string) error {
 	paramData, _ := json.Marshal(params)
 	env := protocol.Envelope{
 		ID:     fmt.Sprintf("token-rotate-%d", time.Now().UnixMilli()),
-		Type:   protocol.TypeTokenRotate,
+		Type:   protocol.TypeAuthRefresh,
 		Params: paramData,
 	}
 	if err := conn.WriteJSON(env); err != nil {
@@ -517,16 +517,16 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch {
-	case action == "shell" && r.Method == http.MethodPost:
-		s.handleAgentShell(w, r, agentID)
+	case action == "exec" && r.Method == http.MethodPost:
+		s.handleAgentExec(w, r, agentID)
 	case action == "fs-read" && r.Method == http.MethodPost:
 		s.handleAgentFSRead(w, r, agentID)
 	case action == "fs-write" && r.Method == http.MethodPost:
 		s.handleAgentFSWrite(w, r, agentID)
-	case action == "screenshot" && r.Method == http.MethodPost:
-		s.handleAgentScreenshot(w, r, agentID)
-	case action == "process-list" && r.Method == http.MethodPost:
-		s.handleAgentProcessList(w, r, agentID)
+	case action == "capture" && r.Method == http.MethodPost:
+		s.handleAgentCapture(w, r, agentID)
+	case action == "task-list" && r.Method == http.MethodPost:
+		s.handleAgentTaskList(w, r, agentID)
 	case action == "health" && r.Method == http.MethodGet:
 		s.handleAgentHealth(w, r, agentID)
 	default:
@@ -534,8 +534,8 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleAgentShell executes a shell command on behalf of an agent.
-func (s *Server) handleAgentShell(w http.ResponseWriter, r *http.Request, agentID string) {
+// handleAgentExec executes a shell command on behalf of an agent.
+func (s *Server) handleAgentExec(w http.ResponseWriter, r *http.Request, agentID string) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "failed to read body", http.StatusBadRequest)
@@ -543,7 +543,7 @@ func (s *Server) handleAgentShell(w http.ResponseWriter, r *http.Request, agentI
 	}
 	defer r.Body.Close()
 
-	var params protocol.ShellParams
+	var params protocol.ExecParams
 	if err := json.Unmarshal(body, &params); err != nil {
 		http.Error(w, fmt.Sprintf("invalid JSON: %v", err), http.StatusBadRequest)
 		return
@@ -600,7 +600,7 @@ func (s *Server) handleAgentShell(w http.ResponseWriter, r *http.Request, agentI
 		}
 	}
 
-	result := protocol.ShellResult{
+	result := protocol.ExecResult{
 		Stdout:     string(output),
 		Stderr:     "",
 		ExitCode:   exitCode,
@@ -609,8 +609,8 @@ func (s *Server) handleAgentShell(w http.ResponseWriter, r *http.Request, agentI
 	}
 
 	// Store result in session
-	s.sessions.AddMemory(agentID, "last_shell", params.Command)
-	s.sessions.AddMemory(agentID, fmt.Sprintf("shell_%d", time.Now().UnixMilli()), fmt.Sprintf("exit=%d", exitCode))
+	s.sessions.AddMemory(agentID, "last_exec", params.Command)
+	s.sessions.AddMemory(agentID, fmt.Sprintf("exec_%d", time.Now().UnixMilli()), fmt.Sprintf("exit=%d", exitCode))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
@@ -690,8 +690,8 @@ func (s *Server) handleAgentFSWrite(w http.ResponseWriter, r *http.Request, agen
 	json.NewEncoder(w).Encode(result)
 }
 
-// handleAgentScreenshot captures a screenshot on behalf of an agent.
-func (s *Server) handleAgentScreenshot(w http.ResponseWriter, r *http.Request, agentID string) {
+// handleAgentCapture captures a screenshot on behalf of an agent.
+func (s *Server) handleAgentCapture(w http.ResponseWriter, r *http.Request, agentID string) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "failed to read body", http.StatusBadRequest)
@@ -738,8 +738,8 @@ func (s *Server) handleAgentScreenshot(w http.ResponseWriter, r *http.Request, a
 	json.NewEncoder(w).Encode(result)
 }
 
-// handleAgentProcessList returns the list of running processes on behalf of an agent.
-func (s *Server) handleAgentProcessList(w http.ResponseWriter, r *http.Request, agentID string) {
+// handleAgentTaskList returns the list of running processes on behalf of an agent.
+func (s *Server) handleAgentTaskList(w http.ResponseWriter, r *http.Request, agentID string) {
 	// Use ps for cross-platform compatibility
 	cmd := exec.Command("ps", "-eo", "pid,comm,%cpu,%mem", "--no-headers")
 	cmd.Env = os.Environ()

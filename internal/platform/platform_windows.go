@@ -128,7 +128,7 @@ func (p *windowsPlatform) Mkdir(path string) (protocol.FSMkdirResult, error) {
 }
 
 // Shell — Windows cmd.exe
-func (p *windowsPlatform) Exec(command string, timeout int, workDir string, env map[string]string) (protocol.ShellResult, error) {
+func (p *windowsPlatform) Exec(command string, timeout int, workDir string, env map[string]string) (protocol.ExecResult, error) {
 	cmd := exec.Command("cmd", "/c", command)
 	if workDir != "" {
 		cmd.Dir = workDir
@@ -175,7 +175,7 @@ func (p *windowsPlatform) Exec(command string, timeout int, workDir string, env 
 		}
 	}
 	_ = start
-	return protocol.ShellResult{
+	return protocol.ExecResult{
 		Stdout:   string(output),
 		Stderr:   "",
 		ExitCode: exitCode,

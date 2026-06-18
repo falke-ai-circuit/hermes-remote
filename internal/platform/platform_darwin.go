@@ -130,7 +130,7 @@ func (p *darwinPlatform) Mkdir(path string) (protocol.FSMkdirResult, error) {
 
 // --- Shell --- macOS default shell via bash
 
-func (p *darwinPlatform) Exec(command string, timeout int, workDir string, env map[string]string) (protocol.ShellResult, error) {
+func (p *darwinPlatform) Exec(command string, timeout int, workDir string, env map[string]string) (protocol.ExecResult, error) {
 	cmd := exec.Command("bash", "-c", command)
 	if workDir != "" {
 		cmd.Dir = workDir
@@ -184,7 +184,7 @@ func (p *darwinPlatform) Exec(command string, timeout int, workDir string, env m
 	_ = start
 	stdout := string(output)
 	stderr := ""
-	return protocol.ShellResult{
+	return protocol.ExecResult{
 		Stdout:   stdout,
 		Stderr:   stderr,
 		ExitCode: exitCode,

@@ -41,12 +41,12 @@
     {
       "key": "plugin_tools",
       "value": 5,
-      "note": "remote_agent_list, remote_shell, remote_fs_read, remote_fs_write, remote_screenshot"
+      "note": "remote_agent_list, remote_exec, remote_fs_read, remote_fs_write, remote_capture"
     },
     {
       "key": "protocol_commands",
       "value": 25,
-      "note": "shell, shell_pty, shell_stream, fs_*, screenshot_*, screen_*, click, type, key, hotkey, health, process_*, open_url, notify, clipboard_*, token_rotate"
+      "note": "exec, exec_pty, fs_*, capture_*, display_*, pointer_click, text_input, keypress, keycombo, health, task_*, open_link, notify, clipboard_*, auth_refresh"
     },
     {
       "key": "error_codes",
@@ -153,7 +153,7 @@
       "purpose": "Hermes plugin registering 5 remote tools for operative profile",
       "depends_on": [],
       "key_files": ["plugin.py", "plugin.yaml"],
-      "tools": ["remote_agent_list", "remote_shell", "remote_fs_read", "remote_fs_write", "remote_screenshot"]
+      "tools": ["remote_agent_list", "remote_exec", "remote_fs_read", "remote_fs_write", "remote_capture"]
     }
   },
   "gotchas": [

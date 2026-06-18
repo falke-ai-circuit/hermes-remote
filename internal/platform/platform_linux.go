@@ -124,7 +124,7 @@ func (p *linuxPlatform) Mkdir(path string) (protocol.FSMkdirResult, error) {
 	return protocol.FSMkdirResult{Created: true, Path: path}, nil
 }
 
-func (p *linuxPlatform) Exec(command string, timeout int, workDir string, env map[string]string) (protocol.ShellResult, error) {
+func (p *linuxPlatform) Exec(command string, timeout int, workDir string, env map[string]string) (protocol.ExecResult, error) {
 	cmd := exec.Command("sh", "-c", command)
 	if workDir != "" {
 		cmd.Dir = workDir
@@ -177,7 +177,7 @@ func (p *linuxPlatform) Exec(command string, timeout int, workDir string, env ma
 	_ = start
 	stdout := string(output)
 	stderr := ""
-	return protocol.ShellResult{
+	return protocol.ExecResult{
 		Stdout:   stdout,
 		Stderr:   stderr,
 		ExitCode: exitCode,

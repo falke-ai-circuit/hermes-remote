@@ -13,59 +13,60 @@ const (
 	TypePong  = "pong"
 
 	// Commands (Server → Agent)
-	TypeShell        = "shell"
-	TypeFSList       = "fs_list"
-	TypeFSStat       = "fs_stat"
-	TypeFSRead       = "fs_read"
-	TypeFSWrite      = "fs_write"
-	TypeFSDelete     = "fs_delete"
-	TypeFSMove       = "fs_move"
-	TypeFSMkdir      = "fs_mkdir"
-	TypeScreenshot   = "screenshot"
-	TypeScreenRegion = "screen_region"
-	TypeScreenInfo   = "screen_info"
-	TypeClick        = "click"
-	TypeType         = "type"
-	TypeKey          = "key"
-	TypeHotkey       = "hotkey"
-	TypeHealth       = "health"
-	TypeProcessList  = "process_list"
-	TypeProcessKill  = "process_kill"
-	TypeOpenURL      = "open_url"
-	TypeNotify       = "notify"
-	TypeClipboardGet = "clipboard_get"
-	TypeClipboardSet = "clipboard_set"
-	TypeTokenRotate  = "token_rotate"
-	TypeTokenRefresh = "token_refresh" // Agent → Server: request proactive token rotation
-	TypeStreamStart  = "stream_start"
-	TypeStreamStop   = "stream_stop"
+	TypeExec          = "exec"
+	TypeExecPTY       = "exec_pty"
+	TypeFSList        = "fs_list"
+	TypeFSStat        = "fs_stat"
+	TypeFSRead        = "fs_read"
+	TypeFileSave      = "file_save"
+	TypeFileRemove    = "file_remove"
+	TypeFSMove        = "fs_move"
+	TypeFSMkdir       = "fs_mkdir"
+	TypeCapture       = "capture"
+	TypeDisplayRegion = "display_region"
+	TypeDisplayInfo   = "display_info"
+	TypePointerClick  = "pointer_click"
+	TypeTextInput     = "text_input"
+	TypeKeyPress      = "keypress"
+	TypeKeyCombo      = "keycombo"
+	TypeHealth        = "health"
+	TypeTaskList      = "task_list"
+	TypeTaskStop      = "task_stop"
+	TypeOpenLink      = "open_link"
+	TypeNotify        = "notify"
+	TypeClipboardRead  = "clipboard_read"
+	TypeClipboardWrite = "clipboard_write"
+	TypeAuthRefresh   = "auth_refresh"
+	TypeAuthRequest   = "auth_request" // Agent → Server: request proactive token rotation
+	TypeStreamBegin   = "stream_begin"
+	TypeStreamEnd     = "stream_end"
 
 	// Results (Agent → Server)
-	TypeShellResult       = "shell_result"
-	TypeFSListResult      = "fs_list_result"
-	TypeFSStatResult      = "fs_stat_result"
-	TypeFSReadResult      = "fs_read_result"
-	TypeFSWriteResult     = "fs_write_result"
-	TypeFSDeleteResult    = "fs_delete_result"
-	TypeFSMoveResult      = "fs_move_result"
-	TypeFSMkdirResult     = "fs_mkdir_result"
-	TypeScreenshotResult  = "screenshot_result"
-	TypeScreenInfoResult  = "screen_info_result"
-	TypeClickResult       = "click_result"
-	TypeTypeResult        = "type_result"
-	TypeKeyResult         = "key_result"
-	TypeHotkeyResult      = "hotkey_result"
-	TypeHealthResult      = "health_result"
-	TypeProcessListResult = "process_list_result"
-	TypeProcessKillResult = "process_kill_result"
-	TypeOpenURLResult     = "open_url_result"
-	TypeNotifyResult      = "notify_result"
-	TypeClipboardGetResult = "clipboard_get_result"
-	TypeClipboardSetResult = "clipboard_set_result"
-	TypeTokenRotateResult  = "token_rotate_result"
-	TypeStreamStartResult  = "stream_start_result"
-	TypeStreamStopResult   = "stream_stop_result"
-	TypeError             = "error"
+	TypeExecResult          = "exec_result"
+	TypeFSListResult       = "fs_list_result"
+	TypeFSStatResult       = "fs_stat_result"
+	TypeFSReadResult       = "fs_read_result"
+	TypeFileSaveResult     = "file_save_result"
+	TypeFileRemoveResult   = "file_remove_result"
+	TypeFSMoveResult       = "fs_move_result"
+	TypeFSMkdirResult      = "fs_mkdir_result"
+	TypeCaptureResult      = "capture_result"
+	TypeDisplayInfoResult  = "display_info_result"
+	TypePointerClickResult = "pointer_click_result"
+	TypeTextInputResult    = "text_input_result"
+	TypeKeyPressResult     = "keypress_result"
+	TypeKeyComboResult     = "keycombo_result"
+	TypeHealthResult       = "health_result"
+	TypeTaskListResult     = "task_list_result"
+	TypeTaskStopResult     = "task_stop_result"
+	TypeOpenLinkResult     = "open_link_result"
+	TypeNotifyResult       = "notify_result"
+	TypeClipboardReadResult  = "clipboard_read_result"
+	TypeClipboardWriteResult = "clipboard_write_result"
+	TypeAuthRefreshResult   = "auth_refresh_result"
+	TypeStreamBeginResult   = "stream_begin_result"
+	TypeStreamEndResult     = "stream_end_result"
+	TypeError               = "error"
 )
 
 // Error codes
@@ -103,14 +104,14 @@ type AgentInfo struct {
 }
 
 // --- Command params ---
-type ShellParams struct {
+type ExecParams struct {
 	Command string            `json:"command"`
 	Timeout int               `json:"timeout,omitempty"` // seconds, default 60
 	WorkDir string            `json:"workdir,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
 }
 
-type ShellResult struct {
+type ExecResult struct {
 	Stdout     string `json:"stdout"`
 	Stderr     string `json:"stderr"`
 	ExitCode   int    `json:"exit_code"`
@@ -261,12 +262,12 @@ type ProcessListResult struct {
 	Processes []ProcessInfo `json:"processes"`
 }
 
-type ProcessKillParams struct {
+type TaskStopParams struct {
 	PID    int `json:"pid"`
 	Signal int `json:"signal,omitempty"`
 }
 
-type ProcessKillResult struct {
+type TaskStopResult struct {
 	Killed bool `json:"killed"`
 	PID    int  `json:"pid"`
 }
@@ -285,7 +286,7 @@ type ClipboardResult struct {
 	Text string `json:"text"`
 }
 
-type ClipboardSetParams struct {
+type ClipboardWriteParams struct {
 	Text string `json:"text"`
 }
 

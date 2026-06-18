@@ -2,10 +2,10 @@
 
 Tools registered:
   - remote_agent_list   : GET  /api/agents
-  - remote_shell         : POST /api/agent/{id}/shell
+  - remote_exec         : POST /api/agent/{id}/exec
   - remote_fs_read       : POST /api/agent/{id}/fs-read
   - remote_fs_write      : POST /api/agent/{id}/fs-write
-  - remote_screenshot    : POST /api/agent/{id}/screenshot
+  - remote_capture    : POST /api/agent/{id}/capture
 
 Environment:
   HERMES_REMOTE_TOKEN   : bearer token (required)
@@ -82,14 +82,14 @@ def _handle_agent_list(args: dict, **kw) -> str:
     return _format_result(r)
 
 
-def _handle_shell(args: dict, **kw) -> str:
-    """Execute a shell command on a remote agent."""
+def _handle_exec(args: dict, **kw) -> str:
+    """Execute a command on a remote agent."""
     agent_id = str(args["agent_id"])
     command = str(args["command"])
     timeout = int(args.get("timeout", 60))
     if timeout <= 0:
         timeout = 60
-    r = _req("POST", f"/api/agent/{agent_id}/shell", {"command": command, "timeout": timeout})
+    r = _req("POST", f"/api/agent/{agent_id}/exec", {"command": command, "timeout": timeout})
     return _format_result(r)
 
 
@@ -113,12 +113,12 @@ def _handle_fs_write(args: dict, **kw) -> str:
     return _format_result(r)
 
 
-def _handle_screenshot(args: dict, **kw) -> str:
-    """Capture a screenshot from a remote agent."""
+def _handle_capture(args: dict, **kw) -> str:
+    """Capture a display from a remote agent."""
     agent_id = str(args["agent_id"])
     display = str(args.get("display", ":0"))
     quality = int(args.get("quality", 80))
-    r = _req("POST", f"/api/agent/{agent_id}/screenshot", {"display": display, "quality": quality})
+    r = _req("POST", f"/api/agent/{agent_id}/capture", {"display": display, "quality": quality})
     return _format_result(r)
 
 
@@ -136,14 +136,14 @@ AGENT_LIST_SCHEMA = {
     },
 }
 
-SHELL_SCHEMA = {
-    "name": "remote_shell",
-    "description": "Execute a shell command on a remote agent and return stdout, stderr, and exit code.",
+EXEC_SCHEMA = {
+    "name": "remote_exec",
+    "description": "Execute a command on a remote agent and return stdout, stderr, and exit code.",
     "parameters": {
         "type": "object",
         "properties": {
             "agent_id": {"type": "string", "description": "ID of the remote agent to execute the command on."},
-            "command": {"type": "string", "description": "Shell command to execute."},
+            "command": {"type": "string", "description": "Command to execute."},
             "timeout": {"type": "integer", "description": "Timeout in seconds (default 60)."},
         },
         "required": ["agent_id", "command"],
@@ -180,9 +180,9 @@ FS_WRITE_SCHEMA = {
     },
 }
 
-SCREENSHOT_SCHEMA = {
-    "name": "remote_screenshot",
-    "description": "Capture a screenshot from a remote agent's display.",
+CAPTURE_SCHEMA = {
+    "name": "remote_capture",
+    "description": "Capture a display from a remote agent's display.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -203,10 +203,10 @@ def register(ctx) -> None:
     """Register all 5 hermes-remote tools. Called by the plugin loader."""
     tools = (
         ("remote_agent_list", AGENT_LIST_SCHEMA, _handle_agent_list, "📋"),
-        ("remote_shell", SHELL_SCHEMA, _handle_shell, "💻"),
+        ("remote_exec", EXEC_SCHEMA, _handle_exec, "💻"),
         ("remote_fs_read", FS_READ_SCHEMA, _handle_fs_read, "📖"),
         ("remote_fs_write", FS_WRITE_SCHEMA, _handle_fs_write, "📝"),
-        ("remote_screenshot", SCREENSHOT_SCHEMA, _handle_screenshot, "📸"),
+        ("remote_capture", CAPTURE_SCHEMA, _handle_capture, "📸"),
     )
 
     for name, schema, handler, emoji in tools:

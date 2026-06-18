@@ -1,4 +1,4 @@
 name: hermes-remote
 version: 0.1.0
 kind: standalone
-description: "Remote agent plugin for Hermes ecosystem. Registers tools to interact with remote agents via the hermes-remote server (list agents, execute shell commands, read/write files, capture screenshots)."
+description: "Remote agent plugin for Hermes ecosystem. Registers tools to interact with remote agents via the hermes-remote server (list agents, execute commands, read/write files, capture displays)."
