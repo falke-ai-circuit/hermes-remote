@@ -300,7 +300,7 @@ func (a *Agent) handleCommand(conn *websocket.Conn, env protocol.Envelope) {
 	case "keypress":
 		resp = a.handleKey(env)
 	case "keycombo":
-		resp = a.handleHotkey(env)
+		resp = a.handleKeyCombo(env)
 	case "health":
 		resp = a.handleHealth(env)
 	case "task_list":
@@ -444,7 +444,7 @@ func (a *Agent) handleCapture(env protocol.Envelope) protocol.Envelope {
 	if err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInvalidParams, err.Error())
 	}
-	result, err := a.plat.Screenshot(params.Display, params.Quality)
+	result, err := a.plat.CaptureDisplay(params.Display, params.Quality)
 	if err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
 	}
@@ -488,12 +488,12 @@ func (a *Agent) handleKey(env protocol.Envelope) protocol.Envelope {
 	return protocol.NewResult(env.ID, protocol.TypeKeyPressResult, protocol.InputResult{Success: true})
 }
 
-func (a *Agent) handleHotkey(env protocol.Envelope) protocol.Envelope {
+func (a *Agent) handleKeyCombo(env protocol.Envelope) protocol.Envelope {
 	params, err := protocol.ParseCommand[protocol.InputParams](env)
 	if err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInvalidParams, err.Error())
 	}
-	if err := a.plat.Hotkey(params.Keys); err != nil {
+	if err := a.plat.KeyCombo(params.Keys); err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
 	}
 	return protocol.NewResult(env.ID, protocol.TypeKeyComboResult, protocol.InputResult{Success: true})

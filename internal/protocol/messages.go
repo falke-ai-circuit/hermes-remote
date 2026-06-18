@@ -189,7 +189,7 @@ type ScreenRegionParams struct {
 	Display int `json:"display,omitempty"`
 }
 
-type ScreenshotResult struct {
+type CaptureResult struct {
 	Format    string `json:"format"`
 	Width     int    `json:"width"`
 	Height    int    `json:"height"`

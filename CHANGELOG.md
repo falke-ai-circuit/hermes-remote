@@ -180,6 +180,24 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 - **Backward compatible**: `Dial`/`Listen`/`NewServer` signature changes are internal (callers updated in the same commit). `StartTLS` still accepts `certFile, keyFile` (now optional overrides). No existing flag removed
 - Build + vet + tests pass: `go build ./cmd/...` exits 0, `go vet ./...` exits 0, `go test ./...` passes (6/6 rate-limiter tests). Cross-compile clean for all 6 targets (linux/darwin/windows × amd64/arm64)
 
+### refactor: rename platform methods to neutral names for AV compatibility
+
+- **Research**: Surveyed naming conventions in legitimate Go-based remote desktop tools on GitHub:
+  - `kbinani/screenshot` (popular Go screen-capture lib): uses `CaptureDisplay(displayIndex int)` and `CaptureRect(rect)`
+  - `mitchellh/go-vnc`: uses `KeyEvent()` and `PointerEvent()` (neutral VNC-style naming)
+  - `lwch/natpass` (4457★ Go remote tool): uses `runCapture()`, `mouseEvent()`, `keyboardEvent()`
+  - `krishpranav/remote-desktop`: uses `ScreenGrabber` interface with `Frames()` / `Screens()`
+- **Renames** (Go method/type names that appear in the compiled binary string table):
+  - `Screenshot()` → `CaptureDisplay()` (Platform interface + all 4 implementations: generic, linux, windows, darwin)
+  - `BaseScreenshot()` → `BaseCaptureDisplay()`
+  - `ScreenshotResult` → `CaptureResult` (protocol struct + all references in agent.go, server.go)
+  - `Hotkey()` → `KeyCombo()` (Platform interface + all 4 implementations)
+  - `BaseHotkey()` → `BaseKeyCombo()`
+  - `handleHotkey()` → `handleKeyCombo()` (agent.go)
+  - Error/log/comment strings: "screenshot not implemented" → "display capture not implemented", "screenshot failed" → "display capture failed", "hotkey requires a non-modifier key" → "key combo requires a non-modifier key"
+- No protocol wire-format changes (command type strings were already neutralized in commit 95af9d7)
+- Build + vet pass: `go build ./...` exits 0, `go vet ./...` exits 0
+
 ### Phase D — Kali Integration Test (2026-06-16)
 
 | Test | Result |

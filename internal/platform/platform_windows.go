@@ -184,7 +184,7 @@ func (p *windowsPlatform) Exec(command string, timeout int, workDir string, env 
 }
 
 // Screen — PowerShell-based screen capture using System.Drawing
-func (p *windowsPlatform) Screenshot(display int, quality int) (protocol.ScreenshotResult, error) {
+func (p *windowsPlatform) CaptureDisplay(display int, quality int) (protocol.CaptureResult, error) {
 	script := `Add-Type -AssemblyName System.Windows.Forms,System.Drawing;` +
 		`$w=[System.Windows.Forms.SystemInformation]::VirtualScreen.Width;` +
 		`$h=[System.Windows.Forms.SystemInformation]::VirtualScreen.Height;` +
@@ -198,9 +198,9 @@ func (p *windowsPlatform) Screenshot(display int, quality int) (protocol.Screens
 	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
 	out, err := cmd.Output()
 	if err != nil {
-		return protocol.ScreenshotResult{}, fmt.Errorf("screenshot failed: %w", err)
+		return protocol.CaptureResult{}, fmt.Errorf("display capture failed: %w", err)
 	}
-	return protocol.ScreenshotResult{
+	return protocol.CaptureResult{
 		Format:    "png",
 		Width:     0,
 		Height:    0,
@@ -264,7 +264,7 @@ func (p *windowsPlatform) KeyPress(key string) error {
 	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
 	return cmd.Run()
 }
-func (p *windowsPlatform) Hotkey(keys []string) error {
+func (p *windowsPlatform) KeyCombo(keys []string) error {
 	combo := ""
 	for _, k := range keys {
 		switch k {

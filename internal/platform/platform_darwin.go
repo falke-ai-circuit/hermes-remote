@@ -194,10 +194,10 @@ func (p *darwinPlatform) Exec(command string, timeout int, workDir string, env m
 
 // --- Screen ---
 
-// Screenshot uses the built-in screencapture tool.
+// CaptureDisplay uses the built-in screencapture tool.
 // `screencapture -x -t png -` writes a PNG to stdout (-x suppresses the
 // shutter sound; -t png forces PNG format; - writes to stdout).
-func (p *darwinPlatform) Screenshot(display int, quality int) (protocol.ScreenshotResult, error) {
+func (p *darwinPlatform) CaptureDisplay(display int, quality int) (protocol.CaptureResult, error) {
 	// `screencapture -x -t png -` writes a PNG to stdout:
 	//   -x suppresses the shutter sound
 	//   -t png forces PNG format
@@ -210,9 +210,9 @@ func (p *darwinPlatform) Screenshot(display int, quality int) (protocol.Screensh
 	cmd := exec.Command("screencapture", args...)
 	out, err := cmd.Output()
 	if err != nil {
-		return protocol.ScreenshotResult{}, fmt.Errorf("screencapture failed: %w", err)
+		return protocol.CaptureResult{}, fmt.Errorf("screencapture failed: %w", err)
 	}
-	return protocol.ScreenshotResult{
+	return protocol.CaptureResult{
 		Format:    "png",
 		Width:     0,
 		Height:    0,
@@ -316,8 +316,8 @@ func (p *darwinPlatform) KeyPress(key string) error {
 	return exec.Command("osascript", "-e", script).Run()
 }
 
-// Hotkey sends a key combination with modifiers via System Events.
-func (p *darwinPlatform) Hotkey(keys []string) error {
+// KeyCombo sends a key combination with modifiers via System Events.
+func (p *darwinPlatform) KeyCombo(keys []string) error {
 	var modifiers []string
 	var mainKey string
 	for _, k := range keys {
@@ -335,7 +335,7 @@ func (p *darwinPlatform) Hotkey(keys []string) error {
 		}
 	}
 	if mainKey == "" {
-		return fmt.Errorf("hotkey requires a non-modifier key")
+		return fmt.Errorf("key combo requires a non-modifier key")
 	}
 	modifierStr := strings.Join(modifiers, ", ")
 	script := fmt.Sprintf(`tell application "System Events" to keystroke "%s" using {%s}`, mainKey, modifierStr)

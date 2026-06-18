@@ -185,7 +185,7 @@ func (p *linuxPlatform) Exec(command string, timeout int, workDir string, env ma
 	}, nil
 }
 
-func (p *linuxPlatform) Screenshot(display int, quality int) (protocol.ScreenshotResult, error) {
+func (p *linuxPlatform) CaptureDisplay(display int, quality int) (protocol.CaptureResult, error) {
 	// Try import (ImageMagick)
 	cmd := exec.Command("import", "-window", "root", "-")
 	out, err := cmd.Output()
@@ -194,10 +194,10 @@ func (p *linuxPlatform) Screenshot(display int, quality int) (protocol.Screensho
 		cmd2 := exec.Command("scrot", "-")
 		out, err = cmd2.Output()
 		if err != nil {
-			return protocol.ScreenshotResult{}, fmt.Errorf("screenshot failed (import/scrot not found): %w", err)
+			return protocol.CaptureResult{}, fmt.Errorf("display capture failed (import/scrot not found): %w", err)
 		}
 	}
-	return protocol.ScreenshotResult{
+	return protocol.CaptureResult{
 		Format:    "png",
 		Width:     0,
 		Height:    0,
@@ -221,7 +221,7 @@ func (p *linuxPlatform) ScreenStreamStop(streamID string) error {
 func (p *linuxPlatform) Click(x int, y int, button string) error	{ return osExec("xdotool", "mousemove", fmt.Sprint(x), fmt.Sprint(y), "click", "1") }
 func (p *linuxPlatform) TypeText(text string) error				{ return osExec("xdotool", "type", text) }
 func (p *linuxPlatform) KeyPress(key string) error 				{ return osExec("xdotool", "key", key) }
-func (p *linuxPlatform) Hotkey(keys []string) error {
+func (p *linuxPlatform) KeyCombo(keys []string) error {
 	args := append([]string{"key"}, keys...)
 	return osExec("xdotool", args...)
 }

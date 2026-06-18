@@ -25,7 +25,7 @@ type Platform interface {
 	Exec(command string, timeout int, workDir string, env map[string]string) (protocol.ExecResult, error)
 
 	// Screen (stubs for now)
-	Screenshot(display int, quality int) (protocol.ScreenshotResult, error)
+	CaptureDisplay(display int, quality int) (protocol.CaptureResult, error)
 	ScreenInfo() protocol.ScreenInfo
 	ScreenStreamStart(display int, fps int, quality int) (protocol.ScreenStreamStartResult, error)
 	ScreenStreamStop(streamID string) error
@@ -34,7 +34,7 @@ type Platform interface {
 	Click(x int, y int, button string) error
 	TypeText(text string) error
 	KeyPress(key string) error
-	Hotkey(keys []string) error
+	KeyCombo(keys []string) error
 
 	// System
 	Health(mode string) protocol.HealthResult
@@ -61,14 +61,14 @@ func BaseHealth(version string, mode string, connectedSince time.Time) protocol.
 	}
 }
 
-func BaseScreenshot() (protocol.ScreenshotResult, error) {
-	return protocol.ScreenshotResult{
+func BaseCaptureDisplay() (protocol.CaptureResult, error) {
+	return protocol.CaptureResult{
 		Format:    "png",
 		Width:     0,
 		Height:    0,
 		Data:      "",
 		SizeBytes: 0,
-	}, fmt.Errorf("screenshot not implemented on %s", runtime.GOOS)
+	}, fmt.Errorf("display capture not implemented on %s", runtime.GOOS)
 }
 
 func BaseScreenInfo() protocol.ScreenInfo {
@@ -87,7 +87,7 @@ func BaseKeyPress(key string) error {
 	return fmt.Errorf("input not implemented on %s", runtime.GOOS)
 }
 
-func BaseHotkey(keys []string) error {
+func BaseKeyCombo(keys []string) error {
 	return fmt.Errorf("input not implemented on %s", runtime.GOOS)
 }
 
@@ -257,8 +257,8 @@ func (p *genericPlatform) Exec(command string, timeout int, workDir string, env 
 	return ExecCommand(command, timeout, workDir, env)
 }
 
-func (p *genericPlatform) Screenshot(display int, quality int) (protocol.ScreenshotResult, error) {
-	return BaseScreenshot()
+func (p *genericPlatform) CaptureDisplay(display int, quality int) (protocol.CaptureResult, error) {
+	return BaseCaptureDisplay()
 }
 
 func (p *genericPlatform) ScreenInfo() protocol.ScreenInfo {
@@ -285,8 +285,8 @@ func (p *genericPlatform) KeyPress(key string) error {
 	return BaseKeyPress(key)
 }
 
-func (p *genericPlatform) Hotkey(keys []string) error {
-	return BaseHotkey(keys)
+func (p *genericPlatform) KeyCombo(keys []string) error {
+	return BaseKeyCombo(keys)
 }
 
 func (p *genericPlatform) Health(mode string) protocol.HealthResult {

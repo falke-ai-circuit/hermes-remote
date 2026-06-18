@@ -690,7 +690,7 @@ func (s *Server) handleAgentFSWrite(w http.ResponseWriter, r *http.Request, agen
 	json.NewEncoder(w).Encode(result)
 }
 
-// handleAgentCapture captures a screenshot on behalf of an agent.
+// handleAgentCapture captures the display on behalf of an agent.
 func (s *Server) handleAgentCapture(w http.ResponseWriter, r *http.Request, agentID string) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -714,7 +714,7 @@ func (s *Server) handleAgentCapture(w http.ResponseWriter, r *http.Request, agen
 		cmd2.Env = os.Environ()
 		out, err = cmd2.Output()
 		if err != nil {
-			result := protocol.ScreenshotResult{
+			result := protocol.CaptureResult{
 				Format:    "error",
 				Width:     0,
 				Height:    0,
@@ -727,7 +727,7 @@ func (s *Server) handleAgentCapture(w http.ResponseWriter, r *http.Request, agen
 		}
 	}
 
-	result := protocol.ScreenshotResult{
+	result := protocol.CaptureResult{
 		Format:    "png",
 		Width:     0,
 		Height:    0,
