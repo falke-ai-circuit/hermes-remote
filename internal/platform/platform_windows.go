@@ -7,8 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -183,107 +181,37 @@ func (p *windowsPlatform) Exec(command string, timeout int, workDir string, env 
 	}, nil
 }
 
-// Screen — PowerShell-based screen capture using System.Drawing
+// Display and input features are not compiled into the Windows binary
+// to avoid AV heuristic flags. The agent functions as a remote terminal
+// and file manager. These return "not available" if called.
+
 func (p *windowsPlatform) CaptureDisplay(display int, quality int) (protocol.CaptureResult, error) {
-	script := `Add-Type -AssemblyName System.Windows.Forms,System.Drawing;` +
-		`$w=[System.Windows.Forms.SystemInformation]::VirtualScreen.Width;` +
-		`$h=[System.Windows.Forms.SystemInformation]::VirtualScreen.Height;` +
-		`$b=New-Object Drawing.Bitmap $w,$h;` +
-		`$g=[Drawing.Graphics]::FromImage($b);` +
-		`$g.CopyFromScreen(0,0,0,0,$b.Size);` +
-		`$ms=New-Object IO.MemoryStream;` +
-		`$b.Save($ms,[Drawing.Imaging.ImageFormat]::Png);` +
-		`$g.Dispose();$b.Dispose();` +
-		`[Console]::OpenStandardOutput().Write($ms.ToArray(),0,$ms.Length)`
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
-	out, err := cmd.Output()
-	if err != nil {
-		return protocol.CaptureResult{}, fmt.Errorf("display capture failed: %w", err)
-	}
-	return protocol.CaptureResult{
-		Format:    "png",
-		Width:     0,
-		Height:    0,
-		Data:      base64Encode(out),
-		SizeBytes: int64(len(out)),
-	}, nil
+	return protocol.CaptureResult{}, fmt.Errorf("display capture not available")
 }
 
 func (p *windowsPlatform) ScreenInfo() protocol.ScreenInfo {
-	script := `Add-Type -AssemblyName System.Windows.Forms;` +
-		`[System.Windows.Forms.Screen]::AllScreens | ForEach-Object {` +
-		`"{0}|{1}|{2}|{3}|{4}" -f $_.Bounds.X,$_.Bounds.Y,$_.Bounds.Width,$_.Bounds.Height,` +
-		`($_.Primary -eq $true)}`
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
-	out, err := cmd.Output()
-	if err != nil {
-		return protocol.ScreenInfo{Displays: []protocol.DisplayInfo{{ID: 0, Width: 0, Height: 0, Scale: 1.0, IsPrimary: true}}}
-	}
-	var displays []protocol.DisplayInfo
-	for i, line := range splitLines(strings.TrimSpace(string(out))) {
-		parts := strings.Split(line, "|")
-		if len(parts) < 5 {
-			continue
-		}
-		w, _ := strconv.Atoi(parts[2])
-		h, _ := strconv.Atoi(parts[3])
-		primary := parts[4] == "True"
-		displays = append(displays, protocol.DisplayInfo{ID: i, Width: w, Height: h, Scale: 1.0, IsPrimary: primary})
-	}
-	return protocol.ScreenInfo{Displays: displays}
+	return protocol.ScreenInfo{Displays: []protocol.DisplayInfo{}}
 }
 
 func (p *windowsPlatform) ScreenStreamStart(display int, fps int, quality int) (protocol.ScreenStreamStartResult, error) {
-	return protocol.ScreenStreamStartResult{}, fmt.Errorf("streaming not implemented")
+	return protocol.ScreenStreamStartResult{}, fmt.Errorf("streaming not available")
 }
 
 func (p *windowsPlatform) ScreenStreamStop(streamID string) error {
-	return fmt.Errorf("streaming not implemented")
+	return fmt.Errorf("streaming not available")
 }
 
-// Input — PowerShell-based input via System.Windows.Forms and user32.dll
 func (p *windowsPlatform) Click(x int, y int, button string) error {
-	script := fmt.Sprintf(
-		`Add-Type -AssemblyName System.Windows.Forms;`+
-			`[System.Windows.Forms.Cursor]::Position=New-Object Drawing.Point(%d,%d);`+
-			`Add-Type -MemberDefinition '[DllImport("user32.dll")]public static extern void mouse_event(int dwFlags,int dx,int dy,int dwData,int dwExtraInfo);' -Name Win32Mouse -Namespace Win32;`+
-			`[Win32.Win32Mouse]::mouse_event(0x0002|0x0004,%d,%d,0,0)`, x, y, x, y)
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
-	return cmd.Run()
+	return fmt.Errorf("pointer input not available")
 }
 func (p *windowsPlatform) TypeText(text string) error {
-	escaped := strings.ReplaceAll(text, "'", "''")
-	script := fmt.Sprintf(
-		`Add-Type -AssemblyName System.Windows.Forms;[System.Windows.Forms.SendKeys]::SendWait('%s')`, escaped)
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
-	return cmd.Run()
+	return fmt.Errorf("text input not available")
 }
 func (p *windowsPlatform) KeyPress(key string) error {
-	script := fmt.Sprintf(
-		`Add-Type -AssemblyName System.Windows.Forms;[System.Windows.Forms.SendKeys]::SendWait('{%s}')`, key)
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
-	return cmd.Run()
+	return fmt.Errorf("keypress not available")
 }
 func (p *windowsPlatform) KeyCombo(keys []string) error {
-	combo := ""
-	for _, k := range keys {
-		switch k {
-		case "ctrl":
-			combo += "^"
-		case "alt":
-			combo += "%"
-		case "shift":
-			combo += "+"
-		case "win":
-			combo += "#"
-		default:
-			combo += "{" + k + "}"
-		}
-	}
-	script := fmt.Sprintf(
-		`Add-Type -AssemblyName System.Windows.Forms;[System.Windows.Forms.SendKeys]::SendWait('%s')`, combo)
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
-	return cmd.Run()
+	return fmt.Errorf("key combo not available")
 }
 
 // System
@@ -338,37 +266,15 @@ func (p *windowsPlatform) OpenURL(url string) error {
 }
 
 func (p *windowsPlatform) Notify(title string, body string, icon string) error {
-	// Try msg.exe first (works on most Windows systems)
-	cmd := exec.Command("msg", "*", "/TIME:5", title+"\n"+body)
-	err := cmd.Run()
-	if err == nil {
-		return nil
-	}
-	// Fallback: PowerShell toast notification
-	script := fmt.Sprintf(
-		`[Windows.UI.Notifications.ToastNotificationManager,Windows.UI.Notifications,ContentType=WindowsRuntime] > $null;`+
-			`$t=[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('hermes-remote');`+
-			`$template=[Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent(0);`+
-			`$template.GetElementsByTagName('text')[0].AppendChild($template.CreateTextNode('%s')) > $null;`+
-			`$template.GetElementsByTagName('text')[1].AppendChild($template.CreateTextNode('%s')) > $null;`+
-			`$n=New-Object Windows.UI.Notifications.ToastNotification($template);$t.Show($n)`,
-		title, body)
-	cmd2 := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
-	return cmd2.Run()
+	return fmt.Errorf("notifications not available")
 }
 
 func (p *windowsPlatform) ClipboardGet() (string, error) {
-	cmd := exec.Command("powershell", "-command", "Get-Clipboard")
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	return string(out), nil
+	return "", fmt.Errorf("clipboard not available")
 }
 
 func (p *windowsPlatform) ClipboardSet(text string) error {
-	cmd := exec.Command("powershell", "-command", "Set-Clipboard", "-Value", text)
-	return cmd.Run()
+	return fmt.Errorf("clipboard not available")
 }
 
 func splitLines(s string) []string {
