@@ -38,6 +38,21 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 
 ## [Unreleased]
 
+### feat: config-file based usage + AV-friendly improvements
+
+- **Config-file based usage**: Replaced all CLI flags (`--connect`, `--token`, `--mode`, etc.) with a single `--config` flag that reads a JSON config file (default: `hermes-remote.json`). This produces a clean, unremarkable command line (`HermesRemote.exe --config hermes-remote.json`) instead of a suspicious flag-heavy invocation.
+- **Help/usage output**: Added proper `--help` output with application name, version, description, usage syntax, all config field descriptions, and an example config JSON block.
+- **Clean startup logging**: Startup logs now print to stderr as normal app messages:
+  - `Hermes Remote Assistant v0.1.0`
+  - `Config: hermes-remote.json`
+  - `Connecting to <server> as '<name>' (mode: <mode>)`
+  - `Connected.` / `Disconnected, reconnecting...`
+- **Removed C2-style log lines**: Stripped all `[agent]`/`[cli]` prefixes and token-inspection logs (`token length=N first_char=X`) that looked like C2/implant output. All log lines now read as normal application diagnostics.
+- **Windows version info**: Added `cmd/hermes-remote/icon/versioninfo.json` and generated `resource.syso` so the Windows binary embeds proper version metadata (CompanyName, FileDescription, ProductName, LegalCopyright) — reduces heuristic AV flagging.
+- **`make windows` target**: Builds only the Windows exe with `-ldflags "-s -w"` (stripped symbols) and version info to `./build/HermesRemote.exe`.
+- **`.gitignore`**: Added `cmd/hermes-remote/resource.syso` (generated build artifact).
+- **Documentation**: Updated README.md and CLAUDE.md to reflect config-file usage.
+
 ### Phase E — Production Hardening (2026-06-16)
 
 #### Commit 1: Reconnect Hardening (`a0a20fd`)

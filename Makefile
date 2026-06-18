@@ -1,4 +1,4 @@
-.PHONY: build vet test cross clean
+.PHONY: build vet test cross clean windows
 
 GOCMD=/opt/data/go/bin/go
 GOBUILD=$(GOCMD) build
@@ -25,3 +25,6 @@ clean:
 	rm -rf ./build/
 	rm -f ./cmd/hermes-remote/hermes-remote
 	rm -f ./cmd/server/server
+
+windows:
+	GOOS=windows GOARCH=amd64 $(GOBUILD) -ldflags "-s -w" -o ./build/HermesRemote.exe ./cmd/hermes-remote/

@@ -88,7 +88,7 @@ func (a *Agent) Run() error {
 }
 
 func (a *Agent) runOutbound() error {
-	log.Printf("[agent] connecting to %s (mode: outbound)", a.cfg.URL)
+	log.Printf("Connecting to %s (mode: outbound)", a.cfg.URL)
 	for {
 		conn, err := protocol.Dial(a.cfg.URL, a.cfg.CertPath, a.cfg.ClientCertFile, a.cfg.ClientKeyFile, a.cfg.Token)
 		if err != nil {
@@ -97,7 +97,7 @@ func (a *Agent) runOutbound() error {
 				return fmt.Errorf("max retries (%d) exceeded: %w", a.cfg.MaxRetries, err)
 			}
 			backoff := a.computeBackoff()
-			log.Printf("[agent] connection failed (attempt %d): %v, retrying in %v", a.backoffAttempt, err, backoff)
+			log.Printf("Connection failed (attempt %d): %v, retrying in %v", a.backoffAttempt, err, backoff)
 			select {
 			case <-a.stopped:
 				return nil
@@ -105,7 +105,7 @@ func (a *Agent) runOutbound() error {
 			}
 			continue
 		}
-		log.Printf("[agent] connected to %s", a.cfg.URL)
+		log.Printf("Connected.")
 		a.mu.Lock()
 		a.conn = conn
 		a.connectedAt = time.Now()
@@ -114,7 +114,7 @@ func (a *Agent) runOutbound() error {
 		a.mu.Unlock()
 		a.handleConnection(conn)
 		// disconnected — reconnect
-		log.Printf("[agent] disconnected, reconnecting...")
+		log.Printf("Disconnected, reconnecting...")
 		select {
 		case <-a.stopped:
 			return nil
@@ -149,7 +149,7 @@ func (a *Agent) computeBackoff() time.Duration {
 }
 
 func (a *Agent) runInbound() error {
-	log.Printf("[agent] listening on %s (mode: inbound)", a.cfg.Addr)
+	log.Printf("Listening on %s (mode: inbound)", a.cfg.Addr)
 	srv, err := protocol.NewServer(a.cfg.Addr, a.cfg.CertFile, a.cfg.KeyFile, "")
 	if err != nil {
 		return fmt.Errorf("start server: %w", err)
@@ -158,10 +158,10 @@ func (a *Agent) runInbound() error {
 	srv.OnConnect = func(conn *websocket.Conn, r *http.Request) bool {
 		token := r.Header.Get("Authorization")
 		if token != "Bearer "+a.cfg.Token {
-			log.Printf("[agent] rejected connection: bad token from %s", r.RemoteAddr)
+			log.Printf("Rejected connection from %s: authentication failed", r.RemoteAddr)
 			return false
 		}
-		log.Printf("[agent] accepted connection from %s", r.RemoteAddr)
+		log.Printf("Accepted connection from %s", r.RemoteAddr)
 		a.mu.Lock()
 		a.conn = conn
 		a.connectedAt = time.Now()
@@ -170,7 +170,7 @@ func (a *Agent) runInbound() error {
 		go a.handleConnection(conn)
 		return true
 	}
-	log.Printf("[agent] server shut down")
+	log.Printf("Server stopped.")
 	return srv.ListenAndServe()
 }
 
@@ -190,7 +190,7 @@ func (a *Agent) handleConnection(conn *websocket.Conn) {
 		Type:   "agent_info",
 		Result: mustMarshal(info),
 	}); err != nil {
-		log.Printf("[agent] failed to send agent info: %v", err)
+		log.Printf("failed to send agent info: %v", err)
 		return
 	}
 
@@ -228,13 +228,13 @@ func (a *Agent) handleConnection(conn *websocket.Conn) {
 	for {
 		select {
 		case err := <-readErr:
-			log.Printf("[agent] read error: %v", err)
+			log.Printf("read error: %v", err)
 			return
 		case <-pingTicker.C:
 			a.mu.Lock()
 			a.pingMisses++
 			if a.pingMisses >= missThreshold {
-				log.Printf("[agent] ping timeout (%d misses), closing", a.pingMisses)
+				log.Printf("ping timeout (%d misses), closing", a.pingMisses)
 				a.mu.Unlock()
 				return
 			}
@@ -243,7 +243,7 @@ func (a *Agent) handleConnection(conn *websocket.Conn) {
 				ID:   fmt.Sprintf("ping-%d", time.Now().UnixMilli()),
 				Type: protocol.TypePing,
 			}); err != nil {
-				log.Printf("[agent] ping failed: %v", err)
+				log.Printf("ping failed: %v", err)
 				return
 			}
 		case <-refreshTicker.C:
@@ -253,13 +253,13 @@ func (a *Agent) handleConnection(conn *websocket.Conn) {
 			expiry := a.tokenExpiry
 			a.mu.Unlock()
 			if !expiry.IsZero() && time.Now().Add(refreshLeadTime).After(expiry) {
-				log.Printf("[agent] token nearing expiry (%v), requesting refresh", expiry)
+				log.Printf("token nearing expiry (%v), requesting refresh", expiry)
 				refreshEnv := protocol.Envelope{
 					ID:   fmt.Sprintf("token-refresh-%d", time.Now().UnixMilli()),
 					Type: protocol.TypeTokenRefresh,
 				}
 				if err := protocol.WriteMessage(conn, refreshEnv); err != nil {
-					log.Printf("[agent] token refresh request failed: %v", err)
+					log.Printf("token refresh request failed: %v", err)
 				}
 			}
 		}
@@ -321,7 +321,7 @@ func (a *Agent) handleCommand(conn *websocket.Conn, env protocol.Envelope) {
 		resp = protocol.NewError(env.ID, protocol.ErrInvalidParams, fmt.Sprintf("unknown command: %s", env.Type))
 	}
 	if err := protocol.WriteMessage(conn, resp); err != nil {
-		log.Printf("[agent] write error: %v", err)
+		log.Printf("write error: %v", err)
 	}
 }
 
@@ -569,7 +569,6 @@ func (a *Agent) handleTokenRotate(env protocol.Envelope) protocol.Envelope {
 		return protocol.NewError(env.ID, protocol.ErrInvalidParams, err.Error())
 	}
 	a.mu.Lock()
-	oldToken := a.cfg.Token
 	a.cfg.Token = params.NewToken
 	// Track the expiry so the proactive-refresh loop can request a new token
 	// before this one expires. A zero Expiry means the server did not set one.
@@ -579,13 +578,11 @@ func (a *Agent) handleTokenRotate(env protocol.Envelope) protocol.Envelope {
 	// Persist the new token to disk so reconnects use the rotated token.
 	if a.cfg.TokenFile != "" {
 		if err := a.persistToken(params.NewToken); err != nil {
-			log.Printf("[agent] failed to persist rotated token: %v", err)
-		} else {
-			log.Printf("[agent] persisted rotated token to %s", a.cfg.TokenFile)
+			log.Printf("Warning: could not persist token: %v", err)
 		}
 	}
 
-	log.Printf("[agent] token rotated (old len=%d, new len=%d)", len(oldToken), len(params.NewToken))
+	log.Printf("Token rotated successfully.")
 	return protocol.NewResult(env.ID, protocol.TypeTokenRotateResult, protocol.TokenRotateResult{
 		Rotated:  true,
 		NewToken: params.NewToken,
@@ -671,7 +668,7 @@ func (a *Agent) SendPrompt(prompt string) {
 	conn := a.conn
 	a.mu.Unlock()
 	if conn == nil {
-		log.Printf("[agent] not connected, cannot send prompt")
+		log.Printf("not connected, cannot send prompt")
 		return
 	}
 	env := protocol.Envelope{
@@ -683,7 +680,7 @@ func (a *Agent) SendPrompt(prompt string) {
 		}),
 	}
 	if err := protocol.WriteMessage(conn, env); err != nil {
-		log.Printf("[agent] send prompt error: %v", err)
+		log.Printf("send prompt error: %v", err)
 	}
 }
 

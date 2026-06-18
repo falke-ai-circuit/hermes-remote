@@ -1,5 +1,6 @@
 build/
 cmd/hermes-remote/hermes-remote
+cmd/hermes-remote/resource.syso
 cmd/server/server
 *.exe
 *.test

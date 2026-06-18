@@ -23,16 +23,30 @@ go build ./cmd/server/           # Server binary
 
 ```bash
 # Server (on main machine)
-./server --addr :7700 --token "hermes.circuit.remote.2026"
+./cmd/server/server --addr :7700 --token "hermes.circuit.remote.2026"
+
+# Agent — create a JSON config file (hermes-remote.json):
+# {
+#   "server": "wss://server:7700",
+#   "token": "...",
+#   "name": "my-computer",
+#   "mode": "silent"
+# }
 
 # Agent — silent mode (daemon, controlled via operative profile)
-./hermes-remote --connect wss://server:7700 --token "..." --mode silent
+./cmd/hermes-remote/hermes-remote --config hermes-remote.json
 
 # Agent — interactive mode (full Hermes CLI on remote)
-./hermes-remote --connect wss://server:7700 --token "..." --mode interactive
+# Set "mode": "interactive" in the config file, then:
+./cmd/hermes-remote/hermes-remote --config hermes-remote.json
 
 # Agent — dual mode (daemon + accepts inbound connections)
-./hermes-remote --listen :7700 --token "..."
+# Set "listen": ":7700" in the config file, then:
+./cmd/hermes-remote/hermes-remote --config hermes-remote.json
+
+# Windows build (with version info + stripped symbols)
+make windows
+# → ./build/HermesRemote.exe --config hermes-remote.json
 ```
 
 ## Architecture
