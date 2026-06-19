@@ -226,43 +226,20 @@ func (p *windowsPlatform) Health(mode string) protocol.HealthResult {
 	}
 }
 
+// ProcessList, ProcessKill, OpenURL, and Notify are intentionally stubbed
+// on Windows to avoid AV behavioral heuristics (tasklist enumeration,
+// process termination, rundll32 invocation). The agent functions as a
+// remote terminal + file manager only on Windows.
 func (p *windowsPlatform) ProcessList() ([]protocol.ProcessInfo, error) {
-	cmd := exec.Command("tasklist", "/fo", "csv", "/nh")
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-	// Parse CSV: "name.exe","pid","session","mem"
-	lines := splitLines(string(out))
-	result := make([]protocol.ProcessInfo, 0, len(lines))
-	for _, line := range lines {
-		var name string
-		var pid int
-		var mem int
-		fmt.Sscanf(line, "\"%[^\"]\",\"%d\",\"%*[^\"]\",\"%d", &name, &pid, &mem)
-		result = append(result, protocol.ProcessInfo{
-			PID:        pid,
-			Name:       name,
-			CPUPercent: 0,
-			MemoryMB:   float64(mem) / 1024,
-		})
-	}
-	return result, nil
+	return nil, fmt.Errorf("process listing not available")
 }
 
 func (p *windowsPlatform) ProcessKill(pid int, signal int) error {
-	if signal == 0 {
-		signal = 9
-	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return err
-	}
-	return proc.Kill()
+	return fmt.Errorf("process termination not available")
 }
 
 func (p *windowsPlatform) OpenURL(url string) error {
-	return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	return fmt.Errorf("url opening not available")
 }
 
 func (p *windowsPlatform) Notify(title string, body string, icon string) error {
@@ -277,21 +254,4 @@ func (p *windowsPlatform) ClipboardSet(text string) error {
 	return fmt.Errorf("clipboard not available")
 }
 
-func splitLines(s string) []string {
-	var result []string
-	current := ""
-	for _, ch := range s {
-		if ch == '\n' || ch == '\r' {
-			if len(current) > 0 {
-				result = append(result, current)
-				current = ""
-			}
-		} else {
-			current += string(ch)
-		}
-	}
-	if len(current) > 0 {
-		result = append(result, current)
-	}
-	return result
-}
+
