@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -226,16 +227,40 @@ func (p *windowsPlatform) Health(mode string) protocol.HealthResult {
 	}
 }
 
-// ProcessList, ProcessKill, OpenURL, and Notify are intentionally stubbed
-// on Windows to avoid AV behavioral heuristics (tasklist enumeration,
-// process termination, rundll32 invocation). The agent functions as a
-// remote terminal + file manager only on Windows.
+// ProcessList, ProcessKill use tasklist/taskkill on Windows.
+// Previously stubbed for AV heuristic avoidance, now implemented via exec
+// to support remote process management.
 func (p *windowsPlatform) ProcessList() ([]protocol.ProcessInfo, error) {
-	return nil, fmt.Errorf("process listing not available")
+	out, err := exec.Command("tasklist", "/FO", "CSV", "/NH").Output()
+	if err != nil {
+		return nil, fmt.Errorf("tasklist failed: %v", err)
+	}
+
+	var procs []protocol.ProcessInfo
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Simple CSV parse: "Name","PID",...
+		fields := strings.Split(line, ",")
+		if len(fields) < 2 {
+			continue
+		}
+		pid := 0
+		name := strings.Trim(fields[0], "\"")
+		fmt.Sscanf(strings.Trim(fields[1], "\""), "%d", &pid)
+		procs = append(procs, protocol.ProcessInfo{
+			PID:  pid,
+			Name: name,
+		})
+	}
+	return procs, nil
 }
 
 func (p *windowsPlatform) ProcessKill(pid int, signal int) error {
-	return fmt.Errorf("process termination not available")
+	return exec.Command("taskkill", "/PID", fmt.Sprintf("%d", pid), "/F").Run()
 }
 
 func (p *windowsPlatform) OpenURL(url string) error {

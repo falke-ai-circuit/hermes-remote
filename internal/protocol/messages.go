@@ -41,6 +41,29 @@ const (
 	TypeStreamBegin   = "stream_begin"
 	TypeStreamEnd     = "stream_end"
 
+	// TCP tunnel — Server → Agent: open a tunnel to a target host:port
+	TypeTunnelOpen    = "tunnel_open"
+	TypeTunnelClose   = "tunnel_close"
+	TypeTunnelData    = "tunnel_data"    // bidirectional data frame
+	TypeTunnelOpened  = "tunnel_opened"  // Agent → Server: tunnel established
+	TypeTunnelClosed  = "tunnel_closed"  // Agent → Server: tunnel closed
+	TypeTunnelError   = "tunnel_error"   // Agent → Server: tunnel error
+
+	// Traffic sniffer — same as tunnel but with capture flag
+	TypeSniffStart    = "sniff_start"
+	TypeSniffStop     = "sniff_stop"
+	TypeSniffData     = "sniff_data"     // captured data frame (direction + data)
+	TypeSniffStarted  = "sniff_started"
+	TypeSniffStopped  = "sniff_stopped"
+
+	// Process control (Server → Agent)
+	TypeProcList      = "proc_list"
+	TypeProcKill      = "proc_kill"
+	TypeProcStart     = "proc_start"
+	TypeProcListResult   = "proc_list_result"
+	TypeProcKillResult   = "proc_kill_result"
+	TypeProcStartResult  = "proc_start_result"
+
 	// Results (Agent → Server)
 	TypeExecResult          = "exec_result"
 	TypeFSListResult       = "fs_list_result"
@@ -299,6 +322,65 @@ type TokenRotateParams struct {
 type TokenRotateResult struct {
 	Rotated  bool   `json:"rotated"`
 	NewToken string `json:"new_token,omitempty"` // echo back for confirmation
+}
+
+// TunnelParams opens a TCP tunnel from the agent to a target host:port.
+// The server creates a local TCP listener; connections to it are relayed
+// through the WebSocket to the agent, which connects to the target.
+type TunnelParams struct {
+	TargetHost string `json:"target_host"` // e.g. "127.0.0.1"
+	TargetPort int    `json:"target_port"` // e.g. 1234
+	ListenPort int    `json:"listen_port,omitempty"` // server-side listen port (0 = auto)
+}
+
+type TunnelOpenResult struct {
+	ListenPort int    `json:"listen_port"`
+	TunnelID   string `json:"tunnel_id"`
+}
+
+type TunnelDataParams struct {
+	TunnelID  string `json:"tunnel_id"`
+	Direction string `json:"direction"` // "client→target" or "target→client"
+	Data      string `json:"data"`      // base64
+}
+
+type TunnelCloseParams struct {
+	TunnelID string `json:"tunnel_id"`
+}
+
+// SniffParams starts a traffic sniffer that connects to target and relays
+// all traffic, capturing it for inspection. Similar to tunnel but with logging.
+type SniffParams struct {
+	TargetHost string `json:"target_host"`
+	TargetPort int    `json:"target_port"`
+	Duration   int    `json:"duration,omitempty"` // seconds, 0 = until stopped
+}
+
+type SniffStartResult struct {
+	SniffID  string `json:"sniff_id"`
+	Captures int    `json:"captures"` // number of frames captured
+}
+
+type SniffDataParams struct {
+	SniffID   string `json:"sniff_id"`
+	Direction string `json:"direction"` // "send" or "recv"
+	Data      string `json:"data"`      // base64
+	Timestamp int64  `json:"timestamp,omitempty"` // unix millis
+}
+
+// ProcStartParams starts a process on the agent.
+type ProcStartParams struct {
+	Command string            `json:"command"`
+	WorkDir string            `json:"workdir,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
+	Background bool           `json:"background,omitempty"` // don't wait for completion
+}
+
+type ProcStartResult struct {
+	PID      int    `json:"pid,omitempty"`
+	Stdout   string `json:"stdout,omitempty"`
+	Stderr   string `json:"stderr,omitempty"`
+	ExitCode int    `json:"exit_code"`
 }
 
 // NewError creates an error envelope.

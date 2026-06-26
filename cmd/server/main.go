@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/falke-ai-circuit/hermes-remote/internal/server"
@@ -20,6 +21,7 @@ func main() {
 	certFile := flag.String("cert-file", "", "TLS certificate file (PEM) for the server; enables TLS when provided with --key-file")
 	keyFile := flag.String("key-file", "", "TLS key file (PEM) for the server; enables TLS when provided with --cert-file")
 	clientCA := flag.String("client-ca", "", "Client CA certificate file (PEM) for TLS mutual authentication; requires --cert-file/--key-file")
+	extraTokens := flag.String("extra-tokens", "", "Comma-separated additional auth tokens (for safe rollover: new server accepts old agent's token)")
 	flag.Parse()
 
 	// Env vars as fallback
@@ -37,6 +39,9 @@ func main() {
 	}
 	if *registryPath == "" {
 		*registryPath = "/tmp/hermes-remote-registry.json"
+	}
+	if *extraTokens == "" {
+		*extraTokens = os.Getenv("HERMES_REMOTE_EXTRA_TOKENS")
 	}
 
 	rlCfg := server.RateLimitConfig{
@@ -63,6 +68,17 @@ func main() {
 		srv = server.NewServerWithRateLimit(*addr, *token, *registryPath, rlCfg)
 	}
 	srv.SetTokenTTL(*tokenTTL)
+
+	// Configure extra tokens for safe deployment rollover
+	if *extraTokens != "" {
+		extra := strings.Split(*extraTokens, ",")
+		// Trim whitespace from each token
+		for i, t := range extra {
+			extra[i] = strings.TrimSpace(t)
+		}
+		srv.SetExtraTokens(extra)
+		log.Printf("Accepting %d extra token(s) for rollover", len(extra))
+	}
 
 	if useTLS {
 		if err := srv.StartTLS("", ""); err != nil {

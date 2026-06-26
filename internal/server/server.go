@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -12,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -33,7 +31,8 @@ type RateLimitConfig struct {
 // Server is the multi-session WebSocket server with agent registry, LLM proxy, and session management.
 type Server struct {
 	addr      string
-	token     string
+	token     string   // primary auth token
+	tokens    []string // all accepted tokens (for multi-token rollover support)
 	registry  *Registry
 	sessions  *SessionManager
 	proxy     *LLMProxy
@@ -54,6 +53,11 @@ type Server struct {
 	// a channel and waits on it. handleMessages delivers the response.
 	pendingMu    sync.Mutex
 	pendingReqs  map[string]chan protocol.Envelope // requestID -> response channel
+
+	// Tunnels: server-side TCP listeners that relay through WebSocket to the agent.
+	tunnelMu    sync.Mutex
+	tunnels     map[string]*Tunnel // tunnelID -> Tunnel
+	tunnelCount int               // for generating unique tunnel IDs
 
 	tokenTTL    time.Duration                 // configured token TTL (0 = rotation disabled)
 	tokenExpiry map[string]time.Time          // agentID -> token expiry time
@@ -78,6 +82,7 @@ func NewServer(addr string, token string, registryPath string) *Server {
 		proxy:         NewLLMProxy(),
 		conns:         make(map[string]*websocket.Conn),
 		pendingReqs:   make(map[string]chan protocol.Envelope),
+		tunnels:       make(map[string]*Tunnel),
 		tokenExpiry:   make(map[string]time.Time),
 		rotatedTokens: make(map[string]string),
 		tokenStop:     make(chan struct{}),
@@ -213,6 +218,41 @@ func (s *Server) ClearTokenExpiry(agentID string) {
 	delete(s.tokenExpiry, agentID)
 }
 
+// SetExtraTokens configures additional accepted auth tokens. This enables
+// safe deployment rollover: start a new server with a new primary token plus
+// the old token as an extra, so the old agent (still using the old token)
+// can connect to the new server until its config is updated.
+func (s *Server) SetExtraTokens(extra []string) {
+	s.tokens = append(s.tokens, s.token)
+	s.tokens = append(s.tokens, extra...)
+}
+
+// isValidToken checks whether the given bearer token matches any accepted token.
+func (s *Server) isValidToken(authHeader string) bool {
+	if s.token == "" {
+		return true // no auth configured
+	}
+	// Check primary token
+	if authHeader == "Bearer "+s.token {
+		return true
+	}
+	// Check extra tokens
+	for _, t := range s.tokens {
+		if authHeader == "Bearer "+t {
+			return true
+		}
+	}
+	// Check rotated tokens
+	s.tokenMu.Lock()
+	defer s.tokenMu.Unlock()
+	for _, rt := range s.rotatedTokens {
+		if authHeader == "Bearer "+rt {
+			return true
+		}
+	}
+	return false
+}
+
 // Start begins listening for WebSocket and HTTP connections.
 func (s *Server) Start() error {
 	s.mux = http.NewServeMux()
@@ -230,6 +270,8 @@ func (s *Server) Start() error {
 	// HTTP API endpoints
 	s.mux.HandleFunc("/api/agents", s.handleListAgents)
 	s.mux.HandleFunc("/api/agent/", s.handleAgentRoute)
+	// File download endpoint (serves files from /tmp/hermes-remote-files/)
+	s.mux.HandleFunc("/download/", s.handleFileDownload)
 
 	// Start proactive token rotation if a TTL was configured.
 	s.StartTokenRotation()
@@ -279,8 +321,9 @@ func (s *Server) StartTLS(certFile, keyFile string) error {
 	s.mux.HandleFunc("/health", s.handleHealth)
 	s.mux.HandleFunc("/api/agents", s.handleListAgents)
 	s.mux.HandleFunc("/api/agent/", s.handleAgentRoute)
+	s.mux.HandleFunc("/download/", s.handleFileDownload)
 
-	// Start proactive token rotation if a TTL was configured.
+	// Start proactive token rotation if a TTL is configured.
 	s.StartTokenRotation()
 
 	mode := "TLS"
@@ -292,8 +335,16 @@ func (s *Server) StartTLS(certFile, keyFile string) error {
 }
 
 // Close shuts down the server, stops the stale-detector goroutine, and stops
-// the token rotation goroutine (if running).
+// the token rotation goroutine (if running). Closes all tunnels.
 func (s *Server) Close() error {
+	// Close all tunnels
+	s.tunnelMu.Lock()
+	for _, t := range s.tunnels {
+		t.Close()
+	}
+	s.tunnels = make(map[string]*Tunnel)
+	s.tunnelMu.Unlock()
+
 	s.registry.Stop()
 	// Stop the token rotation goroutine and wait for it to drain.
 	close(s.tokenStop)
@@ -306,26 +357,12 @@ func (s *Server) Close() error {
 
 // handleWebSocket upgrades HTTP to WebSocket, authenticates, and processes agent connections.
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	// Auth check — accept global token OR per-agent rotated token
+	// Auth check — accept primary, extra, or rotated tokens
 	authHeader := r.Header.Get("Authorization")
-	if s.token != "" {
-		valid := authHeader == "Bearer "+s.token
-		if !valid {
-			// Check rotated tokens
-			s.tokenMu.Lock()
-			for _, rt := range s.rotatedTokens {
-				if authHeader == "Bearer "+rt {
-					valid = true
-					break
-				}
-			}
-			s.tokenMu.Unlock()
-		}
-		if !valid {
-			log.Printf("[server] auth rejected from %s", r.RemoteAddr)
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
+	if !s.isValidToken(authHeader) {
+		log.Printf("[server] auth rejected from %s", r.RemoteAddr)
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
 	}
 
 	upgrader := &websocket.Upgrader{
@@ -466,6 +503,12 @@ func (s *Server) handleMessages(agentID string, conn *websocket.Conn) {
 			}
 			s.pendingMu.Unlock()
 
+			// Handle tunnel data from agent (target→client direction)
+			if env.Type == protocol.TypeTunnelData {
+				s.handleTunnelDataFromAgent(env)
+				continue
+			}
+
 			// Store results in session context if relevant
 			s.sessions.AddMemory(agentID, "last_msg_type", env.Type)
 			s.sessions.AddMemory(agentID, fmt.Sprintf("msg_%d", time.Now().UnixMilli()), string(mustMarshalRaw(env)))
@@ -544,6 +587,20 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentCapture(w, r, agentID)
 	case action == "task-list" && r.Method == http.MethodPost:
 		s.handleAgentTaskList(w, r, agentID)
+	case action == "proc-list" && r.Method == http.MethodPost:
+		s.handleAgentProcList(w, r, agentID)
+	case action == "proc-kill" && r.Method == http.MethodPost:
+		s.handleAgentProcKill(w, r, agentID)
+	case action == "proc-start" && r.Method == http.MethodPost:
+		s.handleAgentProcStart(w, r, agentID)
+	case action == "tunnel" && r.Method == http.MethodPost:
+		s.handleAgentTunnel(w, r, agentID)
+	case action == "tunnel-close" && r.Method == http.MethodPost:
+		s.handleAgentTunnelClose(w, r, agentID)
+	case action == "sniff" && r.Method == http.MethodPost:
+		s.handleAgentSniff(w, r, agentID)
+	case action == "sniff-stop" && r.Method == http.MethodPost:
+		s.handleAgentSniffStop(w, r, agentID)
 	case action == "health" && r.Method == http.MethodGet:
 		s.handleAgentHealth(w, r, agentID)
 	default:
@@ -646,7 +703,7 @@ func mustMarshalRaw(v interface{}) []byte {
 	return data
 }
 
-// handleAgentFSRead reads a file on behalf of an agent.
+// handleAgentFSRead reads a file ON THE REMOTE AGENT via WebSocket.
 func (s *Server) handleAgentFSRead(w http.ResponseWriter, r *http.Request, agentID string) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -661,30 +718,16 @@ func (s *Server) handleAgentFSRead(w http.ResponseWriter, r *http.Request, agent
 		return
 	}
 
-	data, err := os.ReadFile(params.Path)
+	resp, err := s.forwardToAgent(agentID, protocol.TypeFSRead, params)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("read failed: %v", err), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
-
-	if params.Offset > 0 && params.Offset < len(data) {
-		data = data[params.Offset:]
-	}
-	if params.Limit > 0 && params.Limit < len(data) {
-		data = data[:params.Limit]
-	}
-
-	result := protocol.FSReadResult{
-		Data:     base64.StdEncoding.EncodeToString(data),
-		Size:     int64(len(data)),
-		Encoding: "base64",
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	json.NewEncoder(w).Encode(resp)
 }
 
-// handleAgentFSWrite writes a file on behalf of an agent.
+// handleAgentFSWrite writes a file ON THE REMOTE AGENT via WebSocket.
 func (s *Server) handleAgentFSWrite(w http.ResponseWriter, r *http.Request, agentID string) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -699,23 +742,16 @@ func (s *Server) handleAgentFSWrite(w http.ResponseWriter, r *http.Request, agen
 		return
 	}
 
-	raw, err := base64.StdEncoding.DecodeString(params.Data)
+	resp, err := s.forwardToAgent(agentID, protocol.TypeFileSave, params)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("invalid base64: %v", err), http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
-
-	if err := os.WriteFile(params.Path, raw, 0644); err != nil {
-		http.Error(w, fmt.Sprintf("write failed: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	result := protocol.FSWriteResult{Written: len(raw), Path: params.Path}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	json.NewEncoder(w).Encode(resp)
 }
 
-// handleAgentCapture captures the display on behalf of an agent.
+// handleAgentCapture captures display ON THE REMOTE AGENT via WebSocket.
 func (s *Server) handleAgentCapture(w http.ResponseWriter, r *http.Request, agentID string) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -730,74 +766,135 @@ func (s *Server) handleAgentCapture(w http.ResponseWriter, r *http.Request, agen
 		return
 	}
 
-	// Try import (ImageMagick), fallback to scrot
-	cmd := exec.Command("import", "-window", "root", "png:-")
-	cmd.Env = os.Environ()
-	out, err := cmd.Output()
+	resp, err := s.forwardToAgent(agentID, protocol.TypeCapture, params)
 	if err != nil {
-		cmd2 := exec.Command("scrot", "-")
-		cmd2.Env = os.Environ()
-		out, err = cmd2.Output()
-		if err != nil {
-			result := protocol.CaptureResult{
-				Format:    "error",
-				Width:     0,
-				Height:    0,
-				Data:      "",
-				SizeBytes: 0,
-			}
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(result)
-			return
-		}
-	}
-
-	result := protocol.CaptureResult{
-		Format:    "png",
-		Width:     0,
-		Height:    0,
-		Data:      base64.StdEncoding.EncodeToString(out),
-		SizeBytes: int64(len(out)),
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	json.NewEncoder(w).Encode(resp)
 }
 
-// handleAgentTaskList returns the list of running processes on behalf of an agent.
+// handleAgentTaskList lists processes ON THE REMOTE AGENT via WebSocket.
 func (s *Server) handleAgentTaskList(w http.ResponseWriter, r *http.Request, agentID string) {
-	// Use ps for cross-platform compatibility
-	cmd := exec.Command("ps", "-eo", "pid,comm,%cpu,%mem", "--no-headers")
-	cmd.Env = os.Environ()
-	out, err := cmd.Output()
+	resp, err := s.forwardToAgent(agentID, protocol.TypeTaskList, nil)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("ps failed: %v", err), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+// handleAgentProcList lists processes ON THE REMOTE AGENT via WebSocket (new).
+func (s *Server) handleAgentProcList(w http.ResponseWriter, r *http.Request, agentID string) {
+	resp, err := s.forwardToAgent(agentID, protocol.TypeProcList, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+// handleAgentProcKill kills a process ON THE REMOTE AGENT via WebSocket.
+func (s *Server) handleAgentProcKill(w http.ResponseWriter, r *http.Request, agentID string) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	var params protocol.TaskStopParams
+	if err := json.Unmarshal(body, &params); err != nil {
+		http.Error(w, fmt.Sprintf("invalid JSON: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	var processes []protocol.ProcessInfo
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	for _, line := range lines {
-		fields := strings.Fields(line)
-		if len(fields) < 4 {
-			continue
-		}
-		pid := 0
-		fmt.Sscanf(fields[0], "%d", &pid)
-		cpu := 0.0
-		fmt.Sscanf(fields[2], "%f", &cpu)
-		mem := 0.0
-		fmt.Sscanf(fields[3], "%f", &mem)
-		processes = append(processes, protocol.ProcessInfo{
-			PID:        pid,
-			Name:       fields[1],
-			CPUPercent: cpu,
-			MemoryMB:   mem,
-		})
+	resp, err := s.forwardToAgent(agentID, protocol.TypeProcKill, params)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+// handleAgentProcStart starts a process ON THE REMOTE AGENT via WebSocket.
+func (s *Server) handleAgentProcStart(w http.ResponseWriter, r *http.Request, agentID string) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	var params protocol.ProcStartParams
+	if err := json.Unmarshal(body, &params); err != nil {
+		http.Error(w, fmt.Sprintf("invalid JSON: %v", err), http.StatusBadRequest)
+		return
 	}
 
-	result := protocol.ProcessListResult{Processes: processes}
+	resp, err := s.forwardToAgent(agentID, protocol.TypeProcStart, params)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	json.NewEncoder(w).Encode(resp)
+}
+
+// forwardToAgent sends a command to the agent via WebSocket and waits for response.
+// This is the generic request-response pattern used by all forwarded handlers.
+func (s *Server) forwardToAgent(agentID string, msgType string, params interface{}) (interface{}, error) {
+	s.mu.RLock()
+	conn, ok := s.conns[agentID]
+	s.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("agent %s not connected", agentID)
+	}
+
+	reqID := fmt.Sprintf("%s-%d", msgType, time.Now().UnixMilli())
+	var paramData json.RawMessage
+	if params != nil {
+		paramData, _ = json.Marshal(params)
+	}
+	env := protocol.Envelope{
+		ID:     reqID,
+		Type:   msgType,
+		Params: paramData,
+	}
+
+	respCh := make(chan protocol.Envelope, 1)
+	s.pendingMu.Lock()
+	s.pendingReqs[reqID] = respCh
+	s.pendingMu.Unlock()
+	defer func() {
+		s.pendingMu.Lock()
+		delete(s.pendingReqs, reqID)
+		s.pendingMu.Unlock()
+	}()
+
+	if err := conn.WriteJSON(env); err != nil {
+		return nil, fmt.Errorf("send to agent failed: %w", err)
+	}
+
+	select {
+	case resp := <-respCh:
+		if resp.Error != nil {
+			return map[string]interface{}{
+				"error": resp.Error.Message,
+			}, nil
+		}
+		var result interface{}
+		if resp.Result != nil {
+			json.Unmarshal(resp.Result, &result)
+		}
+		return result, nil
+	case <-time.After(120 * time.Second):
+		return nil, fmt.Errorf("agent did not respond within 120s")
+	}
 }
 
 // handleAgentHealth returns the full health record for a single agent.
@@ -809,6 +906,20 @@ func (s *Server) handleAgentHealth(w http.ResponseWriter, r *http.Request, agent
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(rec)
+}
+
+// handleFileDownload serves files from /tmp/hermes-remote-files/ over HTTP.
+// This allows the agent to download large files (like updated binaries) from
+// the server without hitting command-line length limits.
+// GET /download/{filename}
+func (s *Server) handleFileDownload(w http.ResponseWriter, r *http.Request) {
+	filename := strings.TrimPrefix(r.URL.Path, "/download/")
+	if filename == "" || strings.Contains(filename, "..") || strings.Contains(filename, "/") {
+		http.Error(w, "invalid filename", http.StatusBadRequest)
+		return
+	}
+	filepath := "/tmp/hermes-remote-files/" + filename
+	http.ServeFile(w, r, filepath)
 }
 
 // handleHealth returns a server health check with per-server stats.

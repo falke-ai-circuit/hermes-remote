@@ -56,6 +56,7 @@ type Agent struct {
 	plat           platform.Platform
 	server         *protocol.Server
 	stopped        chan struct{}
+	tunnelMgr      *tunnelManager
 
 	// tokenExpiry is the expiry time of the current token, if the server has
 	// issued a rotating token with an expiry. A zero value means "no expiry".
@@ -66,9 +67,10 @@ type Agent struct {
 // New creates a new agent.
 func New(cfg Config) *Agent {
 	return &Agent{
-		cfg:     cfg,
-		stopped: make(chan struct{}),
-		plat:    platform.New(cfg.Name),
+		cfg:       cfg,
+		stopped:   make(chan struct{}),
+		plat:      platform.New(cfg.Name),
+		tunnelMgr: newTunnelManager(),
 	}
 }
 
@@ -175,7 +177,10 @@ func (a *Agent) runInbound() error {
 }
 
 func (a *Agent) handleConnection(conn *websocket.Conn) {
-	defer conn.Close()
+	defer func() {
+		conn.Close()
+		a.closeAllTunnels()
+	}()
 
 	// Send agent info
 	info := protocol.AgentInfo{
@@ -317,6 +322,18 @@ func (a *Agent) handleCommand(conn *websocket.Conn, env protocol.Envelope) {
 		resp = a.handleClipboardWrite(env)
 	case "auth_refresh":
 		resp = a.handleTokenRotate(env)
+	case protocol.TypeTunnelOpen:
+		resp = a.handleTunnelOpen(env)
+	case protocol.TypeTunnelData:
+		resp = a.handleTunnelData(env)
+	case protocol.TypeTunnelClose:
+		resp = a.handleTunnelClose(env)
+	case protocol.TypeProcList:
+		resp = a.handleProcList(env)
+	case protocol.TypeProcKill:
+		resp = a.handleProcKill(env)
+	case protocol.TypeProcStart:
+		resp = a.handleProcStart(env)
 	default:
 		resp = protocol.NewError(env.ID, protocol.ErrInvalidParams, fmt.Sprintf("unknown command: %s", env.Type))
 	}
