@@ -49,6 +49,12 @@ type Server struct {
 	mu        sync.RWMutex
 	conns     map[string]*websocket.Conn // agentID -> conn
 
+	// pendingRequests maps request IDs to response channels for request-response
+	// over WebSocket. When handleAgentExec sends a command to an agent, it creates
+	// a channel and waits on it. handleMessages delivers the response.
+	pendingMu    sync.Mutex
+	pendingReqs  map[string]chan protocol.Envelope // requestID -> response channel
+
 	tokenTTL    time.Duration                 // configured token TTL (0 = rotation disabled)
 	tokenExpiry map[string]time.Time          // agentID -> token expiry time
 	tokenMu       sync.Mutex                   // guards tokenExpiry + rotatedTokens
@@ -65,15 +71,16 @@ func NewServer(addr string, token string, registryPath string) *Server {
 	reg := NewRegistry(registryPath)
 	reg.StartStaleDetector()
 	return &Server{
-		addr:        addr,
-		token:       token,
-		registry:    reg,
-		sessions:    NewSessionManager(),
-		proxy:       NewLLMProxy(),
-		conns:       make(map[string]*websocket.Conn),
+		addr:          addr,
+		token:         token,
+		registry:      reg,
+		sessions:      NewSessionManager(),
+		proxy:         NewLLMProxy(),
+		conns:         make(map[string]*websocket.Conn),
+		pendingReqs:   make(map[string]chan protocol.Envelope),
 		tokenExpiry:   make(map[string]time.Time),
 		rotatedTokens: make(map[string]string),
-		tokenStop:   make(chan struct{}),
+		tokenStop:     make(chan struct{}),
 	}
 }
 
@@ -449,6 +456,16 @@ func (s *Server) handleMessages(agentID string, conn *websocket.Conn) {
 			}
 
 		default:
+			// Check if this is a response to a pending request (exec, fs_read, etc.)
+			s.pendingMu.Lock()
+			if ch, ok := s.pendingReqs[env.ID]; ok {
+				delete(s.pendingReqs, env.ID)
+				s.pendingMu.Unlock()
+				ch <- env
+				continue
+			}
+			s.pendingMu.Unlock()
+
 			// Store results in session context if relevant
 			s.sessions.AddMemory(agentID, "last_msg_type", env.Type)
 			s.sessions.AddMemory(agentID, fmt.Sprintf("msg_%d", time.Now().UnixMilli()), string(mustMarshalRaw(env)))
@@ -534,7 +551,8 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleAgentExec executes a shell command on behalf of an agent.
+// handleAgentExec executes a shell command ON THE REMOTE AGENT via WebSocket.
+// It forwards the command to the connected agent and waits for the response.
 func (s *Server) handleAgentExec(w http.ResponseWriter, r *http.Request, agentID string) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -553,67 +571,74 @@ func (s *Server) handleAgentExec(w http.ResponseWriter, r *http.Request, agentID
 		params.Timeout = 60
 	}
 
-	start := time.Now()
-
-	cmd := exec.Command("sh", "-c", params.Command)
-	if params.WorkDir != "" {
-		cmd.Dir = params.WorkDir
-	}
-	if len(params.Env) > 0 {
-		cmd.Env = os.Environ()
-		for k, v := range params.Env {
-			cmd.Env = append(cmd.Env, k+"="+v)
-		}
+	// Get the agent's WebSocket connection
+	s.mu.RLock()
+	conn, ok := s.conns[agentID]
+	s.mu.RUnlock()
+	if !ok {
+		http.Error(w, fmt.Sprintf("agent %s not connected", agentID), http.StatusServiceUnavailable)
+		return
 	}
 
-	// Run command with timeout
-	type cmdResult struct {
-		output []byte
-		err    error
+	// Build the command envelope
+	reqID := fmt.Sprintf("exec-%d", time.Now().UnixMilli())
+	paramData, _ := json.Marshal(params)
+	env := protocol.Envelope{
+		ID:     reqID,
+		Type:   protocol.TypeExec,
+		Params: paramData,
 	}
-	done := make(chan cmdResult, 1)
-	go func() {
-		out, err := cmd.CombinedOutput()
-		done <- cmdResult{out, err}
+
+	// Register a pending response channel
+	respCh := make(chan protocol.Envelope, 1)
+	s.pendingMu.Lock()
+	s.pendingReqs[reqID] = respCh
+	s.pendingMu.Unlock()
+	defer func() {
+		s.pendingMu.Lock()
+		delete(s.pendingReqs, reqID)
+		s.pendingMu.Unlock()
 	}()
 
-	var output []byte
-	var cmdErr error
-	timedOut := false
+	// Send the command to the agent
+	if err := conn.WriteJSON(env); err != nil {
+		http.Error(w, fmt.Sprintf("send to agent failed: %v", err), http.StatusServiceUnavailable)
+		return
+	}
 
+	// Wait for response with timeout
 	select {
-	case res := <-done:
-		output = res.output
-		cmdErr = res.err
-	case <-time.After(time.Duration(params.Timeout) * time.Second):
-		cmd.Process.Kill()
-		<-done // wait for goroutine to finish after killing
-		timedOut = true
-	}
-
-	exitCode := 0
-	if cmdErr != nil {
-		if exitErr, ok := cmdErr.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else if !timedOut {
-			exitCode = -1
+	case resp := <-respCh:
+		if resp.Error != nil {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"stdout":     "",
+				"stderr":     resp.Error.Message,
+				"exit_code":  -1,
+				"duration_ms": 0,
+				"timed_out":  false,
+			})
+			return
 		}
+		// Parse the exec result from the response
+		var execResult protocol.ExecResult
+		if resp.Result != nil {
+			json.Unmarshal(resp.Result, &execResult)
+		}
+		s.sessions.AddMemory(agentID, "last_exec", params.Command)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(execResult)
+
+	case <-time.After(time.Duration(params.Timeout) * time.Second):
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"stdout":     "",
+			"stderr":     "command timed out",
+			"exit_code":  -1,
+			"duration_ms": params.Timeout * 1000,
+			"timed_out":  true,
+		})
 	}
-
-	result := protocol.ExecResult{
-		Stdout:     string(output),
-		Stderr:     "",
-		ExitCode:   exitCode,
-		DurationMs: time.Since(start).Milliseconds(),
-		TimedOut:   timedOut,
-	}
-
-	// Store result in session
-	s.sessions.AddMemory(agentID, "last_exec", params.Command)
-	s.sessions.AddMemory(agentID, fmt.Sprintf("exec_%d", time.Now().UnixMilli()), fmt.Sprintf("exit=%d", exitCode))
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
 }
 
 func mustMarshalRaw(v interface{}) []byte {
