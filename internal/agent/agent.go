@@ -57,6 +57,8 @@ type Agent struct {
 	server         *protocol.Server
 	stopped        chan struct{}
 	tunnelMgr      *tunnelManager
+	mitmMgr        *mitmManager
+	debugMgr       *debugManager
 
 	// tokenExpiry is the expiry time of the current token, if the server has
 	// issued a rotating token with an expiry. A zero value means "no expiry".
@@ -71,6 +73,8 @@ func New(cfg Config) *Agent {
 		stopped:   make(chan struct{}),
 		plat:      platform.New(cfg.Name),
 		tunnelMgr: newTunnelManager(),
+		mitmMgr:   newMitmManager(),
+		debugMgr:  newDebugManager(),
 	}
 }
 
@@ -180,6 +184,8 @@ func (a *Agent) handleConnection(conn *websocket.Conn) {
 	defer func() {
 		conn.Close()
 		a.closeAllTunnels()
+		a.closeAllMitm()
+		a.closeAllDebug()
 	}()
 
 	// Send agent info
@@ -334,6 +340,22 @@ func (a *Agent) handleCommand(conn *websocket.Conn, env protocol.Envelope) {
 		resp = a.handleProcKill(env)
 	case protocol.TypeProcStart:
 		resp = a.handleProcStart(env)
+	case protocol.TypeMitmStart:
+		resp = a.handleMitmStart(env)
+	case protocol.TypeMitmStop:
+		resp = a.handleMitmStop(env)
+	case "mitm_traffic":
+		resp = a.handleMitmTraffic(env)
+	case protocol.TypeDebugAttach:
+		resp = a.handleDebugAttach(env)
+	case protocol.TypeDebugDetach:
+		resp = a.handleDebugDetach(env)
+	case protocol.TypeDebugReadMem:
+		resp = a.handleDebugReadMem(env)
+	case protocol.TypeDebugModules:
+		resp = a.handleDebugModules(env)
+	case protocol.TypeDebugMemQuery:
+		resp = a.handleDebugMemQuery(env)
 	default:
 		resp = protocol.NewError(env.ID, protocol.ErrInvalidParams, fmt.Sprintf("unknown command: %s", env.Type))
 	}

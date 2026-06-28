@@ -56,6 +56,20 @@ const (
 	TypeSniffStarted  = "sniff_started"
 	TypeSniffStopped  = "sniff_stopped"
 
+	// MITM TCP proxy — agent listens on a local port, forwards to target, logs all traffic
+	TypeMitmStart    = "mitm_start"
+	TypeMitmStop     = "mitm_stop"
+	TypeMitmData     = "mitm_data"     // captured traffic frame (direction + hex data)
+	TypeMitmStarted  = "mitm_started"
+	TypeMitmStopped  = "mitm_stopped"
+
+	// Debugger — attach to process, read memory, dump modules
+	TypeDebugAttach   = "debug_attach"
+	TypeDebugDetach   = "debug_detach"
+	TypeDebugReadMem  = "debug_read_mem"
+	TypeDebugModules  = "debug_modules"
+	TypeDebugMemQuery = "debug_mem_query"
+
 	// Process control (Server → Agent)
 	TypeProcList      = "proc_list"
 	TypeProcKill      = "proc_kill"
@@ -359,6 +373,94 @@ type SniffParams struct {
 type SniffStartResult struct {
 	SniffID  string `json:"sniff_id"`
 	Captures int    `json:"captures"` // number of frames captured
+}
+
+// MitmStartParams starts a MITM TCP proxy on the agent.
+type MitmStartParams struct {
+	ListenAddr string `json:"listen_addr"` // e.g. "127.0.0.3:1516"
+	TargetAddr string `json:"target_addr"` // e.g. "127.0.0.1:1516"
+	LogPath    string `json:"log_path"`    // e.g. "C:\	emp\\mitm-traffic.log"
+	ReuseAddr  bool   `json:"reuse_addr,omitempty"` // use SO_REUSEADDR (Windows)
+}
+
+type MitmStartResult struct {
+	MitmID     string `json:"mitm_id"`
+	ListenAddr string `json:"listen_addr"`
+}
+
+type MitmStopParams struct {
+	MitmID string `json:"mitm_id"`
+}
+
+type MitmTrafficResult struct {
+	MitmID    string `json:"mitm_id"`
+	Traffic   string `json:"traffic"`    // full hex log content
+	Size      int    `json:"size"`
+	Entries   int    `json:"entries"`    // number of C->T / T->C entries
+}
+
+// --- Debugger params/results ---
+
+type DebugAttachParams struct {
+	PID         int    `json:"pid"`
+	ProcessName string `json:"process_name,omitempty"` // alternative: find by name
+}
+
+type DebugAttachResult struct {
+	DebugID  string `json:"debug_id"`
+	PID      int    `json:"pid"`
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	BaseAddr uint64 `json:"base_addr"`
+}
+
+type DebugReadMemParams struct {
+	DebugID string `json:"debug_id"`
+	Address uint64 `json:"address"`
+	Size    int    `json:"size"`
+}
+
+type DebugReadMemResult struct {
+	Data    string `json:"data"`     // base64 encoded
+	HexData string `json:"hex_data"` // hex string for readability
+	Size    int    `json:"size"`
+	Address uint64 `json:"address"`
+}
+
+type DebugModulesParams struct {
+	DebugID string `json:"debug_id"`
+}
+
+type DebugModuleInfo struct {
+	Name     string `json:"name"`
+	BaseAddr uint64 `json:"base_addr"`
+	Size     int    `json:"size"`
+	Path     string `json:"path"`
+}
+
+type DebugModulesResult struct {
+	Modules []DebugModuleInfo `json:"modules"`
+}
+
+type DebugMemQueryParams struct {
+	DebugID string `json:"debug_id"`
+	Address uint64 `json:"address"`
+}
+
+type DebugMemRegion struct {
+	BaseAddress uint64 `json:"base_address"`
+	Size        uint64 `json:"size"`
+	State       uint32 `json:"state"`
+	Protect     uint32 `json:"protect"`
+	Type        uint32 `json:"type"`
+}
+
+type DebugMemQueryResult struct {
+	Region DebugMemRegion `json:"region"`
+}
+
+type DebugDetachParams struct {
+	DebugID string `json:"debug_id"`
 }
 
 type SniffDataParams struct {

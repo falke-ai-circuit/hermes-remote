@@ -10,6 +10,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -272,6 +274,7 @@ func (s *Server) Start() error {
 	s.mux.HandleFunc("/api/agent/", s.handleAgentRoute)
 	// File download endpoint (serves files from /tmp/hermes-remote-files/)
 	s.mux.HandleFunc("/download/", s.handleFileDownload)
+	s.mux.HandleFunc("/logreport/", s.handleLogReportProxy)
 
 	// Start proactive token rotation if a TTL was configured.
 	s.StartTokenRotation()
@@ -322,6 +325,7 @@ func (s *Server) StartTLS(certFile, keyFile string) error {
 	s.mux.HandleFunc("/api/agents", s.handleListAgents)
 	s.mux.HandleFunc("/api/agent/", s.handleAgentRoute)
 	s.mux.HandleFunc("/download/", s.handleFileDownload)
+	s.mux.HandleFunc("/logreport/", s.handleLogReportProxy)
 
 	// Start proactive token rotation if a TTL is configured.
 	s.StartTokenRotation()
@@ -601,6 +605,22 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentSniff(w, r, agentID)
 	case action == "sniff-stop" && r.Method == http.MethodPost:
 		s.handleAgentSniffStop(w, r, agentID)
+	case action == "mitm-start" && r.Method == http.MethodPost:
+		s.handleAgentMitmStart(w, r, agentID)
+	case action == "mitm-stop" && r.Method == http.MethodPost:
+		s.handleAgentMitmStop(w, r, agentID)
+	case action == "mitm-traffic" && r.Method == http.MethodPost:
+		s.handleAgentMitmTraffic(w, r, agentID)
+	case action == "debug-attach" && r.Method == http.MethodPost:
+		s.handleAgentDebugAttach(w, r, agentID)
+	case action == "debug-detach" && r.Method == http.MethodPost:
+		s.handleAgentDebugDetach(w, r, agentID)
+	case action == "debug-read-mem" && r.Method == http.MethodPost:
+		s.handleAgentDebugReadMem(w, r, agentID)
+	case action == "debug-modules" && r.Method == http.MethodPost:
+		s.handleAgentDebugModules(w, r, agentID)
+	case action == "debug-mem-query" && r.Method == http.MethodPost:
+		s.handleAgentDebugMemQuery(w, r, agentID)
 	case action == "health" && r.Method == http.MethodGet:
 		s.handleAgentHealth(w, r, agentID)
 	default:
@@ -946,3 +966,17 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
+
+// handleLogReportProxy proxies /logreport/ requests to the LOGReport server on localhost:8642.
+// This allows the remote VM (which can only reach port 80) to access the LOGReport web UI.
+func (s *Server) handleLogReportProxy(w http.ResponseWriter, r *http.Request) {
+	target, _ := url.Parse("http://localhost:8642")
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	// Strip the /logreport prefix
+	r.URL.Path = strings.TrimPrefix(r.URL.Path, "/logreport")
+	if r.URL.Path == "" {
+		r.URL.Path = "/"
+	}
+	proxy.ServeHTTP(w, r)
+}
+
