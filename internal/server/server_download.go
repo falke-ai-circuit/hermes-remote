@@ -1,0 +1,58 @@
+package server
+
+import (
+	"encoding/json"
+	"net/http"
+	"strings"
+)
+
+// handleFileDownload serves files from /tmp/hermes-remote-files/ over HTTP.
+// This allows the agent to download large files (like updated binaries) from
+// the server without hitting command-line length limits.
+// GET /download/{filename}
+func (s *Server) handleFileDownload(w http.ResponseWriter, r *http.Request) {
+	if !s.checkAPIAuth(w, r) {
+		return
+	}
+	filename := r.URL.Path
+	// Support multiple path prefixes for file download
+	for _, prefix := range []string{"/api/agent/file/", "/api/download/", "/download/"} {
+		if strings.HasPrefix(filename, prefix) {
+			filename = strings.TrimPrefix(filename, prefix)
+			break
+		}
+	}
+	// Also handle /api/agent/{id}/download/{filename}
+	if strings.HasPrefix(filename, "/api/agent/") && strings.Contains(filename, "/download/") {
+		parts := strings.SplitN(filename, "/download/", 2)
+		if len(parts) == 2 {
+			filename = parts[1]
+		}
+	}
+	if filename == "" || strings.Contains(filename, "..") || strings.Contains(filename, "/") {
+		http.Error(w, "invalid filename", http.StatusBadRequest)
+		return
+	}
+	filepath := "/tmp/hermes-remote-files/" + filename
+	http.ServeFile(w, r, filepath)
+}
+
+// handleFileDownloadBody serves a file from the download directory, with the
+// filename specified in the JSON body. This works through Docker proxies that
+// only forward 2-level paths like /api/agent/{id}/{action}.
+// POST /api/agent/{id}/file-download  body: {"filename":"example.exe"}
+func (s *Server) handleFileDownloadBody(w http.ResponseWriter, r *http.Request) {
+	var params struct {
+		Filename string `json:"filename"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if params.Filename == "" || strings.Contains(params.Filename, "..") || strings.Contains(params.Filename, "/") {
+		http.Error(w, "invalid filename", http.StatusBadRequest)
+		return
+	}
+	filepath := "/tmp/hermes-remote-files/" + params.Filename
+	http.ServeFile(w, r, filepath)
+}
