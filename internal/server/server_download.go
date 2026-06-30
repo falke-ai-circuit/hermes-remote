@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 )
@@ -9,11 +10,24 @@ import (
 // handleFileDownload serves files from /tmp/hermes-remote-files/ over HTTP.
 // This allows the agent to download large files (like updated binaries) from
 // the server without hitting command-line length limits.
-// GET /download/{filename}
+//
+// Canonical endpoint: GET /download/{filename}
+// Docker-compatible patterns (deprecated, log warning):
+//   - /api/download/{filename}
+//   - /api/agent/file/{filename}
+//   - /api/agent/{id}/download/{filename}
+//   - POST /api/agent/{id}/file-download (body: {"filename":"..."})
 func (s *Server) handleFileDownload(w http.ResponseWriter, r *http.Request) {
 	if !s.checkAPIAuth(w, r) {
 		return
 	}
+
+	// Canonical path: /download/{filename}
+	canonical := strings.HasPrefix(r.URL.Path, "/download/")
+	if !canonical {
+		log.Printf("[server] deprecated download path: %s — use /download/{filename}", r.URL.Path)
+	}
+
 	filename := r.URL.Path
 	// Support multiple path prefixes for file download
 	for _, prefix := range []string{"/api/agent/file/", "/api/download/", "/download/"} {
