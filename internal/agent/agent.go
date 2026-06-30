@@ -283,51 +283,51 @@ func (a *Agent) handleCommand(conn *websocket.Conn, env protocol.Envelope) {
 	switch env.Type {
 	case protocol.TypePing:
 		resp = protocol.NewPong(env.ID)
-	case "exec":
+	case protocol.TypeExec:
 		resp = a.handleExec(env)
-	case "exec_pty":
+	case protocol.TypeExecPTY:
 		resp = a.handleShellPTY(env)
-	case "fs_list":
+	case protocol.TypeFSList:
 		resp = a.handleFSList(env)
-	case "fs_stat":
+	case protocol.TypeFSStat:
 		resp = a.handleFSStat(env)
-	case "fs_read":
+	case protocol.TypeFSRead:
 		resp = a.handleFSRead(env)
-	case "file_save":
+	case protocol.TypeFileSave:
 		resp = a.handleFSWrite(env)
-	case "file_remove":
+	case protocol.TypeFileRemove:
 		resp = a.handleFSDelete(env)
-	case "fs_move":
+	case protocol.TypeFSMove:
 		resp = a.handleFSMove(env)
-	case "fs_mkdir":
+	case protocol.TypeFSMkdir:
 		resp = a.handleFSMkdir(env)
-	case "capture":
+	case protocol.TypeCapture:
 		resp = a.handleCapture(env)
-	case "display_info":
+	case protocol.TypeDisplayInfo:
 		resp = a.handleDisplayInfo(env)
-	case "pointer_click":
+	case protocol.TypePointerClick:
 		resp = a.handleClick(env)
-	case "text_input":
+	case protocol.TypeTextInput:
 		resp = a.handleType(env)
-	case "keypress":
+	case protocol.TypeKeyPress:
 		resp = a.handleKey(env)
-	case "keycombo":
+	case protocol.TypeKeyCombo:
 		resp = a.handleKeyCombo(env)
-	case "health":
+	case protocol.TypeHealth:
 		resp = a.handleHealth(env)
-	case "task_list":
+	case protocol.TypeTaskList:
 		resp = a.handleTaskList(env)
-	case "task_stop":
+	case protocol.TypeTaskStop:
 		resp = a.handleTaskStop(env)
-	case "open_link":
+	case protocol.TypeOpenLink:
 		resp = a.handleOpenLink(env)
-	case "notify":
+	case protocol.TypeNotify:
 		resp = a.handleNotify(env)
-	case "clipboard_read":
+	case protocol.TypeClipboardRead:
 		resp = a.handleClipboardRead(env)
-	case "clipboard_write":
+	case protocol.TypeClipboardWrite:
 		resp = a.handleClipboardWrite(env)
-	case "auth_refresh", "token_rotate":
+	case protocol.TypeAuthRefresh, protocol.TypeTokenRotate:
 		resp = a.handleTokenRotate(env)
 	case protocol.TypeTunnelOpen:
 		resp = a.handleTunnelOpen(env)
@@ -345,7 +345,7 @@ func (a *Agent) handleCommand(conn *websocket.Conn, env protocol.Envelope) {
 		resp = a.handleMitmStart(env)
 	case protocol.TypeMitmStop:
 		resp = a.handleMitmStop(env)
-	case "mitm_traffic":
+	case protocol.TypeMitmData:
 		resp = a.handleMitmTraffic(env)
 	case protocol.TypeDebugAttach:
 		resp = a.handleDebugAttach(env)
