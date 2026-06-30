@@ -23,6 +23,7 @@ func main() {
 	clientCA := flag.String("client-ca", "", "Client CA certificate file (PEM) for TLS mutual authentication; requires --cert-file/--key-file")
 	extraTokens := flag.String("extra-tokens", "", "Comma-separated additional auth tokens (for safe rollover: new server accepts old agent's token)")
 	requireAPIAuth := flag.Bool("require-api-auth", false, "Require bearer-token auth on HTTP API endpoints (/api/agents, /api/agent/*, /download/*). When false (default), missing auth is logged as a warning but allowed through.")
+	proxyFlags := flag.String("proxy", "", "Reverse proxy: path=target (repeatable via comma). Example: /logreport=http://localhost:8642. When empty, defaults to /logreport=http://localhost:8642 for backward compatibility.")
 	flag.Parse()
 
 	// Env vars as fallback
@@ -70,6 +71,27 @@ func main() {
 	}
 	srv.SetTokenTTL(*tokenTTL)
 	srv.SetRequireAPIAuth(*requireAPIAuth)
+
+	// Configure reverse proxies. Default: LOGReport proxy for backward compat.
+	var proxies []server.ProxyEntry
+	if *proxyFlags != "" {
+		for _, p := range strings.Split(*proxyFlags, ",") {
+			parts := strings.SplitN(strings.TrimSpace(p), "=", 2)
+			if len(parts) == 2 {
+				proxies = append(proxies, server.ProxyEntry{
+					PathPrefix: strings.TrimSpace(parts[0]),
+					TargetURL:  strings.TrimSpace(parts[1]),
+				})
+			}
+		}
+	} else {
+		// Default: LOGReport proxy
+		proxies = []server.ProxyEntry{
+			{PathPrefix: "/logreport", TargetURL: "http://localhost:8642"},
+		}
+	}
+	srv.SetProxies(proxies)
+	log.Printf("Configured %d reverse proxy route(s)", len(proxies))
 
 	// Configure extra tokens for safe deployment rollover
 	if *extraTokens != "" {

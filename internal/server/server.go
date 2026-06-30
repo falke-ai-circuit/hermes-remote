@@ -65,6 +65,10 @@ type Server struct {
 	rotatedTokens map[string]string            // agentID -> last rotated token
 	tokenStop   chan struct{}                 // closes to stop rotation goroutine
 	tokenWG     sync.WaitGroup                // waits for rotation goroutine on shutdown
+
+	// Configurable reverse proxies (path prefix → target URL)
+	proxyMu sync.RWMutex
+	proxies map[string]*ProxyEntry
 }
 
 // startTime records when the server process began, used by /health for uptime.
@@ -86,6 +90,7 @@ func NewServer(addr string, token string, registryPath string) *Server {
 		tokenExpiry:   make(map[string]time.Time),
 		rotatedTokens: make(map[string]string),
 		tokenStop:     make(chan struct{}),
+		proxies:       make(map[string]*ProxyEntry),
 	}
 }
 
