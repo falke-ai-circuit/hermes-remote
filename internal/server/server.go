@@ -61,6 +61,11 @@ type Server struct {
 	tunnels     map[string]*Tunnel // tunnelID -> Tunnel
 	tunnelCount int               // for generating unique tunnel IDs
 
+	// requireAPIAuth enforces bearer-token auth on HTTP API endpoints
+	// (/api/agents, /api/agent/*, /download/*). When false (default), requests
+	// without an Authorization header are allowed through with a warning log.
+	requireAPIAuth bool
+
 	tokenTTL    time.Duration                 // configured token TTL (0 = rotation disabled)
 	tokenExpiry map[string]time.Time          // agentID -> token expiry time
 	tokenMu       sync.Mutex                   // guards tokenExpiry + rotatedTokens
@@ -255,6 +260,37 @@ func (s *Server) isValidToken(authHeader string) bool {
 	return false
 }
 
+// SetRequireAPIAuth enables or disables mandatory bearer-token authentication
+// on HTTP API endpoints. When enabled, requests without a valid Authorization
+// header are rejected with 401. When disabled (default), missing auth is logged
+// as a warning but the request is allowed through.
+func (s *Server) SetRequireAPIAuth(require bool) {
+	s.requireAPIAuth = require
+}
+
+// checkAPIAuth verifies the Authorization header on HTTP API requests. Returns
+// true if the request should proceed, false if it should be rejected with 401.
+// When requireAPIAuth is false, missing auth is logged but allowed.
+func (s *Server) checkAPIAuth(w http.ResponseWriter, r *http.Request) bool {
+	authHeader := r.Header.Get("Authorization")
+	if s.isValidToken(authHeader) {
+		return true
+	}
+	if !s.requireAPIAuth {
+		// Auth optional: log warning, allow through
+		if authHeader == "" {
+			log.Printf("[server] warning: unauthenticated API request from %s: %s (enable --require-api-auth to enforce)", r.RemoteAddr, r.URL.Path)
+		} else {
+			log.Printf("[server] warning: invalid auth token from %s: %s", r.RemoteAddr, r.URL.Path)
+		}
+		return true
+	}
+	// Auth required: reject
+	log.Printf("[server] API auth rejected from %s: %s", r.RemoteAddr, r.URL.Path)
+	http.Error(w, "unauthorized", http.StatusUnauthorized)
+	return false
+}
+
 // Start begins listening for WebSocket and HTTP connections.
 func (s *Server) Start() error {
 	s.mux = http.NewServeMux()
@@ -274,6 +310,8 @@ func (s *Server) Start() error {
 	s.mux.HandleFunc("/api/agent/", s.handleAgentRoute)
 	// File download endpoint (serves files from /tmp/hermes-remote-files/)
 	s.mux.HandleFunc("/download/", s.handleFileDownload)
+	// Also serve downloads under /api/download/ for Docker proxy compatibility
+	s.mux.HandleFunc("/api/download/", s.handleFileDownload)
 	s.mux.HandleFunc("/logreport/", s.handleLogReportProxy)
 
 	// Start proactive token rotation if a TTL was configured.
@@ -325,6 +363,7 @@ func (s *Server) StartTLS(certFile, keyFile string) error {
 	s.mux.HandleFunc("/api/agents", s.handleListAgents)
 	s.mux.HandleFunc("/api/agent/", s.handleAgentRoute)
 	s.mux.HandleFunc("/download/", s.handleFileDownload)
+	s.mux.HandleFunc("/api/download/", s.handleFileDownload)
 	s.mux.HandleFunc("/logreport/", s.handleLogReportProxy)
 
 	// Start proactive token rotation if a TTL is configured.
@@ -556,6 +595,9 @@ func (s *Server) InitiateTokenRotation(agentID string, newToken string) error {
 
 // handleListAgents returns the list of registered agents as JSON.
 func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
+	if !s.checkAPIAuth(w, r) {
+		return
+	}
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -567,6 +609,9 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 
 // handleAgentRoute dispatches /api/agent/{id}/... routes.
 func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
+	if !s.checkAPIAuth(w, r) {
+		return
+	}
 	path := strings.TrimPrefix(r.URL.Path, "/api/agent/")
 	parts := strings.SplitN(path, "/", 2)
 	if len(parts) == 0 {
@@ -578,6 +623,27 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 	action := ""
 	if len(parts) > 1 {
 		action = parts[1]
+	}
+
+	// Special case: /api/agent/file/{filename} serves files from the download directory.
+	// This routes file downloads through the /api/agent/ prefix which Docker proxies forward.
+	if agentID == "file" && action != "" {
+		s.handleFileDownload(w, r)
+		return
+	}
+
+	// Special case: /api/agent/{any-id}/download/{filename} serves files from the download directory.
+	// This works through Docker proxies that only forward /api/agent/{known-id}/* paths.
+	if action != "" && strings.HasPrefix(action, "download/") {
+		s.handleFileDownload(w, r)
+		return
+	}
+
+	// Special case: /api/agent/{any-id}/file-download serves a file specified in the JSON body.
+	// This is a 2-level path that works through Docker proxies that only forward 2-level paths.
+	if action == "file-download" && r.Method == http.MethodPost {
+		s.handleFileDownloadBody(w, r)
+		return
 	}
 
 	switch {
@@ -933,12 +999,49 @@ func (s *Server) handleAgentHealth(w http.ResponseWriter, r *http.Request, agent
 // the server without hitting command-line length limits.
 // GET /download/{filename}
 func (s *Server) handleFileDownload(w http.ResponseWriter, r *http.Request) {
-	filename := strings.TrimPrefix(r.URL.Path, "/download/")
+	if !s.checkAPIAuth(w, r) {
+		return
+	}
+	filename := r.URL.Path
+	// Support multiple path prefixes for file download
+	for _, prefix := range []string{"/api/agent/file/", "/api/download/", "/download/"} {
+		if strings.HasPrefix(filename, prefix) {
+			filename = strings.TrimPrefix(filename, prefix)
+			break
+		}
+	}
+	// Also handle /api/agent/{id}/download/{filename}
+	if strings.HasPrefix(filename, "/api/agent/") && strings.Contains(filename, "/download/") {
+		parts := strings.SplitN(filename, "/download/", 2)
+		if len(parts) == 2 {
+			filename = parts[1]
+		}
+	}
 	if filename == "" || strings.Contains(filename, "..") || strings.Contains(filename, "/") {
 		http.Error(w, "invalid filename", http.StatusBadRequest)
 		return
 	}
 	filepath := "/tmp/hermes-remote-files/" + filename
+	http.ServeFile(w, r, filepath)
+}
+
+// handleFileDownloadBody serves a file from the download directory, with the
+// filename specified in the JSON body. This works through Docker proxies that
+// only forward 2-level paths like /api/agent/{id}/{action}.
+// POST /api/agent/{id}/file-download  body: {"filename":"example.exe"}
+func (s *Server) handleFileDownloadBody(w http.ResponseWriter, r *http.Request) {
+	var params struct {
+		Filename string `json:"filename"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if params.Filename == "" || strings.Contains(params.Filename, "..") || strings.Contains(params.Filename, "/") {
+		http.Error(w, "invalid filename", http.StatusBadRequest)
+		return
+	}
+	filepath := "/tmp/hermes-remote-files/" + params.Filename
 	http.ServeFile(w, r, filepath)
 }
 

@@ -22,6 +22,7 @@ func main() {
 	keyFile := flag.String("key-file", "", "TLS key file (PEM) for the server; enables TLS when provided with --cert-file")
 	clientCA := flag.String("client-ca", "", "Client CA certificate file (PEM) for TLS mutual authentication; requires --cert-file/--key-file")
 	extraTokens := flag.String("extra-tokens", "", "Comma-separated additional auth tokens (for safe rollover: new server accepts old agent's token)")
+	requireAPIAuth := flag.Bool("require-api-auth", false, "Require bearer-token auth on HTTP API endpoints (/api/agents, /api/agent/*, /download/*). When false (default), missing auth is logged as a warning but allowed through.")
 	flag.Parse()
 
 	// Env vars as fallback
@@ -68,6 +69,7 @@ func main() {
 		srv = server.NewServerWithRateLimit(*addr, *token, *registryPath, rlCfg)
 	}
 	srv.SetTokenTTL(*tokenTTL)
+	srv.SetRequireAPIAuth(*requireAPIAuth)
 
 	// Configure extra tokens for safe deployment rollover
 	if *extraTokens != "" {
