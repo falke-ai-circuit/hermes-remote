@@ -70,7 +70,13 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		s.SetTokenExpiry(agentID, time.Now().Add(s.tokenTTL))
 	}
 
-	log.Printf("[server] agent connected: %s (%s/%s, mode=%s)", agentID, info.OS, info.Arch, info.Mode)
+	// Determine protocol version (missing = "1" = old agent)
+	protoVer := info.ProtocolVersion
+	if protoVer == "" {
+		protoVer = "1"
+	}
+
+	log.Printf("[server] agent connected: %s (%s/%s, mode=%s, protocol=%s)", agentID, info.OS, info.Arch, info.Mode, protoVer)
 
 	// Handle messages
 	go s.handleMessages(agentID, conn)

@@ -133,11 +133,12 @@ type ErrorInfo struct {
 
 // --- Agent Info (sent on connect) ---
 type AgentInfo struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-	OS      string `json:"os"`
-	Arch    string `json:"arch"`
-	Mode    string `json:"mode"` // "outbound", "inbound", "dual"
+	Name            string `json:"name"`
+	Version         string `json:"version"`
+	OS              string `json:"os"`
+	Arch            string `json:"arch"`
+	Mode            string `json:"mode"` // "outbound", "inbound", "dual"
+	ProtocolVersion string `json:"protocol_version,omitempty"` // "1" = original, "2" = post-refactor. Missing = "1" (old agent).
 }
 
 // --- Command params ---

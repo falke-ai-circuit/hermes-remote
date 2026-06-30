@@ -190,11 +190,12 @@ func (a *Agent) handleConnection(conn *websocket.Conn) {
 
 	// Send agent info
 	info := protocol.AgentInfo{
-		Name:    a.cfg.Name,
-		Version: Version,
-		OS:      getOS(),
-		Arch:    getArch(),
-		Mode:    a.cfg.Mode,
+		Name:            a.cfg.Name,
+		Version:         Version,
+		OS:              getOS(),
+		Arch:            getArch(),
+		Mode:            a.cfg.Mode,
+		ProtocolVersion: "2",
 	}
 	if err := protocol.WriteMessage(conn, protocol.Envelope{
 		ID:     "agent-info",
@@ -435,9 +436,37 @@ func (a *Agent) handleFSWrite(env protocol.Envelope) protocol.Envelope {
 	if err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInvalidParams, "invalid base64 data")
 	}
-	result, err := a.plat.WriteFile(params.Path, data, params.Mode)
-	if err != nil {
-		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
+	// Resumable chunked write:
+	// - offset=0, mode="create": truncate/create file, write from beginning (first chunk)
+	// - offset>0: open existing file (no truncate), seek to offset, write (subsequent chunk)
+	// - offset=0, mode!="create": overwrite from beginning without truncate (retransmit first chunk)
+	var result protocol.FSWriteResult
+	if params.Offset > 0 || (params.Offset == 0 && params.Mode != "" && params.Mode != "create") {
+		// Subsequent chunk: open existing file without truncating
+		f, err := os.OpenFile(params.Path, os.O_WRONLY, 0644)
+		if err != nil {
+			// File doesn't exist yet — create it
+			f, err = os.OpenFile(params.Path, os.O_WRONLY|os.O_CREATE, 0644)
+			if err != nil {
+				return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
+			}
+		}
+		defer f.Close()
+		_, err = f.Seek(int64(params.Offset), 0)
+		if err != nil {
+			return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
+		}
+		_, err = f.Write(data)
+		if err != nil {
+			return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
+		}
+		result = protocol.FSWriteResult{Path: params.Path, Written: len(data)}
+	} else {
+		// First chunk (offset=0, no mode or mode="create"): create/truncate and write
+		result, err = a.plat.WriteFile(params.Path, data, params.Mode)
+		if err != nil {
+			return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
+		}
 	}
 	return protocol.NewResult(env.ID, protocol.TypeFileSaveResult, result)
 }
