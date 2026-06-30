@@ -117,7 +117,7 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 
 
 // handleAgentExec executes a shell command ON THE REMOTE AGENT via WebSocket.
-// It forwards the command to the connected agent and waits for the response.
+// Uses forwardToAgent with a per-command timeout (default 60s, from params).
 func (s *Server) handleAgentExec(w http.ResponseWriter, r *http.Request, agentID string) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -136,76 +136,44 @@ func (s *Server) handleAgentExec(w http.ResponseWriter, r *http.Request, agentID
 		params.Timeout = 60
 	}
 
-	// Get the agent's WebSocket connection
-	s.mu.RLock()
-	conn, ok := s.conns[agentID]
-	s.mu.RUnlock()
-	if !ok {
-		http.Error(w, fmt.Sprintf("agent %s not connected", agentID), http.StatusServiceUnavailable)
-		return
-	}
-
-	// Build the command envelope
-	reqID := fmt.Sprintf("exec-%d", time.Now().UnixMilli())
-	paramData, _ := json.Marshal(params)
-	env := protocol.Envelope{
-		ID:     reqID,
-		Type:   protocol.TypeExec,
-		Params: paramData,
-	}
-
-	// Register a pending response channel
-	respCh := make(chan protocol.Envelope, 1)
-	s.pendingMu.Lock()
-	s.pendingReqs[reqID] = respCh
-	s.pendingMu.Unlock()
-	defer func() {
-		s.pendingMu.Lock()
-		delete(s.pendingReqs, reqID)
-		s.pendingMu.Unlock()
-	}()
-
-	// Send the command to the agent
-	if err := conn.WriteJSON(env); err != nil {
-		http.Error(w, fmt.Sprintf("send to agent failed: %v", err), http.StatusServiceUnavailable)
-		return
-	}
-
-	// Wait for response with timeout
-	select {
-	case resp := <-respCh:
-		if resp.Error != nil {
+	timeout := time.Duration(params.Timeout) * time.Second
+	resp, err := s.forwardToAgentWithTimeout(agentID, protocol.TypeExec, params, timeout)
+	if err != nil {
+		// Check if it was a timeout
+		if strings.Contains(err.Error(), "timed out") {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]interface{}{
-				"stdout":     "",
-				"stderr":     resp.Error.Message,
-				"exit_code":  -1,
-				"duration_ms": 0,
-				"timed_out":  false,
+				"stdout":      "",
+				"stderr":      "command timed out",
+				"exit_code":   -1,
+				"duration_ms": params.Timeout * 1000,
+				"timed_out":   true,
 			})
 			return
 		}
-		// Parse the exec result from the response
-		var execResult protocol.ExecResult
-		if resp.Result != nil {
-			json.Unmarshal(resp.Result, &execResult)
-		}
-		s.sessions.AddMemory(agentID, "last_exec", params.Command)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(execResult)
-
-	case <-time.After(time.Duration(params.Timeout) * time.Second):
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"stdout":     "",
-			"stderr":     "command timed out",
-			"exit_code":  -1,
-			"duration_ms": params.Timeout * 1000,
-			"timed_out":  true,
-		})
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
 	}
-}
 
+	// If the response contains an error field, format it like the old handler did
+	if m, ok := resp.(map[string]interface{}); ok {
+		if errMsg, hasErr := m["error"]; hasErr {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"stdout":      "",
+				"stderr":      errMsg,
+				"exit_code":   -1,
+				"duration_ms": 0,
+				"timed_out":   false,
+			})
+			return
+		}
+	}
+
+	s.sessions.AddMemory(agentID, "last_exec", params.Command)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
 
 func mustMarshalRaw(v interface{}) []byte {
 	data, _ := json.Marshal(v)
@@ -364,7 +332,15 @@ func (s *Server) handleAgentProcStart(w http.ResponseWriter, r *http.Request, ag
 
 // forwardToAgent sends a command to the agent via WebSocket and waits for response.
 // This is the generic request-response pattern used by all forwarded handlers.
+// Uses a default 120-second timeout.
 func (s *Server) forwardToAgent(agentID string, msgType string, params interface{}) (interface{}, error) {
+	return s.forwardToAgentWithTimeout(agentID, msgType, params, 120*time.Second)
+}
+
+// forwardToAgentWithTimeout sends a command to the agent via WebSocket and waits
+// for response with a custom timeout. This is the core request-response method —
+// forwardToAgent is a convenience wrapper with a 120s default.
+func (s *Server) forwardToAgentWithTimeout(agentID string, msgType string, params interface{}, timeout time.Duration) (interface{}, error) {
 	s.mu.RLock()
 	conn, ok := s.conns[agentID]
 	s.mu.RUnlock()
@@ -409,8 +385,8 @@ func (s *Server) forwardToAgent(agentID string, msgType string, params interface
 			json.Unmarshal(resp.Result, &result)
 		}
 		return result, nil
-	case <-time.After(120 * time.Second):
-		return nil, fmt.Errorf("agent did not respond within 120s")
+	case <-time.After(timeout):
+		return nil, fmt.Errorf("agent did not respond within %v (timed out)", timeout)
 	}
 }
 
