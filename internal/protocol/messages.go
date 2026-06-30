@@ -36,8 +36,10 @@ const (
 	TypeNotify        = "notify"
 	TypeClipboardRead  = "clipboard_read"
 	TypeClipboardWrite = "clipboard_write"
-	TypeAuthRefresh   = "auth_refresh"
-	TypeAuthRequest   = "auth_request" // Agent → Server: request proactive token rotation
+	TypeTokenRotate    = "token_rotate"    // Server → Agent: rotate token (new name)
+	TypeAuthRefresh    = "auth_refresh"    // DEPRECATED alias for TypeTokenRotate (backward compat)
+	TypeTokenRefresh   = "token_refresh"   // Agent → Server: request proactive token rotation (new name)
+	TypeAuthRequest    = "auth_request"    // DEPRECATED alias for TypeTokenRefresh (backward compat)
 	TypeStreamBegin   = "stream_begin"
 	TypeStreamEnd     = "stream_end"
 
@@ -100,7 +102,8 @@ const (
 	TypeNotifyResult       = "notify_result"
 	TypeClipboardReadResult  = "clipboard_read_result"
 	TypeClipboardWriteResult = "clipboard_write_result"
-	TypeAuthRefreshResult   = "auth_refresh_result"
+	TypeTokenRotateResult   = "token_rotate_result" // new name
+	TypeAuthRefreshResult   = "auth_refresh_result"  // DEPRECATED alias (backward compat)
 	TypeStreamBeginResult   = "stream_begin_result"
 	TypeStreamEndResult     = "stream_end_result"
 	TypeError               = "error"

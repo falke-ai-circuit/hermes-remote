@@ -268,7 +268,7 @@ func (a *Agent) handleConnection(conn *websocket.Conn) {
 				log.Printf("token nearing expiry (%v), requesting refresh", expiry)
 				refreshEnv := protocol.Envelope{
 					ID:   fmt.Sprintf("token-refresh-%d", time.Now().UnixMilli()),
-					Type: protocol.TypeAuthRequest,
+					Type: protocol.TypeTokenRefresh,
 				}
 				if err := protocol.WriteMessage(conn, refreshEnv); err != nil {
 					log.Printf("token refresh request failed: %v", err)
@@ -327,7 +327,7 @@ func (a *Agent) handleCommand(conn *websocket.Conn, env protocol.Envelope) {
 		resp = a.handleClipboardRead(env)
 	case "clipboard_write":
 		resp = a.handleClipboardWrite(env)
-	case "auth_refresh":
+	case "auth_refresh", "token_rotate":
 		resp = a.handleTokenRotate(env)
 	case protocol.TypeTunnelOpen:
 		resp = a.handleTunnelOpen(env)

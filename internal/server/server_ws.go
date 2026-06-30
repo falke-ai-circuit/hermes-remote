@@ -130,9 +130,10 @@ func (s *Server) handleMessages(agentID string, conn *websocket.Conn) {
 				s.registry.RecordError(agentID, env.Error.Message)
 			}
 
-		case protocol.TypeAuthRefreshResult:
+		case protocol.TypeAuthRefreshResult, protocol.TypeTokenRotateResult:
 			// Agent confirmed it applied a rotated token. Record the event and
 			// schedule the next expiry from now (relative to the new token).
+			// Handles both old ("auth_refresh_result") and new ("token_rotate_result") names.
 			var result protocol.TokenRotateResult
 			if env.Result != nil {
 				_ = json.Unmarshal(env.Result, &result)
@@ -143,7 +144,7 @@ func (s *Server) handleMessages(agentID string, conn *websocket.Conn) {
 				s.SetTokenExpiry(agentID, time.Now().Add(s.tokenTTL))
 			}
 
-		case protocol.TypeAuthRequest:
+		case protocol.TypeAuthRequest, protocol.TypeTokenRefresh:
 			// Agent requested a proactive token refresh (its token is nearing
 			// expiry). Generate a new token and send it back.
 			newToken := generateToken()
