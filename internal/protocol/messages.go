@@ -51,12 +51,12 @@ const (
 	TypeTunnelClosed  = "tunnel_closed"  // Agent → Server: tunnel closed
 	TypeTunnelError   = "tunnel_error"   // Agent → Server: tunnel error
 
-	// Traffic sniffer — same as tunnel but with capture flag
+	// Traffic sniffer — server-side handlers exist in tunnel.go but agent
+	// doesn't implement them yet. SniffStart/Stop ARE used by the server's
+	// handleAgentSniff/handleAgentSniffStop. SniffData/Started/Stopped are
+	// reserved for future agent→server capture frames (not yet implemented).
 	TypeSniffStart    = "sniff_start"
 	TypeSniffStop     = "sniff_stop"
-	TypeSniffData     = "sniff_data"     // captured data frame (direction + data)
-	TypeSniffStarted  = "sniff_started"
-	TypeSniffStopped  = "sniff_stopped"
 
 	// MITM TCP proxy — agent listens on a local port, forwards to target, logs all traffic
 	TypeMitmStart    = "mitm_start"
@@ -465,13 +465,6 @@ type DebugMemQueryResult struct {
 
 type DebugDetachParams struct {
 	DebugID string `json:"debug_id"`
-}
-
-type SniffDataParams struct {
-	SniffID   string `json:"sniff_id"`
-	Direction string `json:"direction"` // "send" or "recv"
-	Data      string `json:"data"`      // base64
-	Timestamp int64  `json:"timestamp,omitempty"` // unix millis
 }
 
 // ProcStartParams starts a process on the agent.
