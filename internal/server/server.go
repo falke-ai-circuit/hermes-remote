@@ -131,20 +131,13 @@ func (s *Server) SetTokenTTL(ttl time.Duration) {
 	s.tokenTTL = ttl
 }
 
-// Start begins listening for WebSocket and HTTP connections.
-func (s *Server) Start() error {
-	s.mux = http.NewServeMux()
-	s.srv = &http.Server{
-		Addr:    s.addr,
-		Handler: s.mux,
-	}
-
+// registerRoutes sets up all HTTP routes on the server's mux. Called once
+// by both Start and StartTLS to avoid route registration duplication.
+func (s *Server) registerRoutes() {
 	// WebSocket endpoint
 	s.mux.HandleFunc("/ws", s.handleWebSocket)
-
 	// Health endpoint
 	s.mux.HandleFunc("/health", s.handleHealth)
-
 	// HTTP API endpoints
 	s.mux.HandleFunc("/api/agents", s.handleListAgents)
 	s.mux.HandleFunc("/api/agent/", s.handleAgentRoute)
@@ -153,6 +146,17 @@ func (s *Server) Start() error {
 	// Also serve downloads under /api/download/ for Docker proxy compatibility
 	s.mux.HandleFunc("/api/download/", s.handleFileDownload)
 	s.mux.HandleFunc("/logreport/", s.handleLogReportProxy)
+}
+
+// Start begins listening for WebSocket and HTTP connections.
+func (s *Server) Start() error {
+	s.mux = http.NewServeMux()
+	s.srv = &http.Server{
+		Addr:    s.addr,
+		Handler: s.mux,
+	}
+
+	s.registerRoutes()
 
 	// Start proactive token rotation if a TTL was configured.
 	s.StartTokenRotation()
@@ -198,13 +202,7 @@ func (s *Server) StartTLS(certFile, keyFile string) error {
 		TLSConfig: tlsConfig,
 	}
 
-	s.mux.HandleFunc("/ws", s.handleWebSocket)
-	s.mux.HandleFunc("/health", s.handleHealth)
-	s.mux.HandleFunc("/api/agents", s.handleListAgents)
-	s.mux.HandleFunc("/api/agent/", s.handleAgentRoute)
-	s.mux.HandleFunc("/download/", s.handleFileDownload)
-	s.mux.HandleFunc("/api/download/", s.handleFileDownload)
-	s.mux.HandleFunc("/logreport/", s.handleLogReportProxy)
+	s.registerRoutes()
 
 	// Start proactive token rotation if a TTL is configured.
 	s.StartTokenRotation()
