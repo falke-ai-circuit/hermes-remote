@@ -22,6 +22,7 @@ const (
 	TypeFileRemove    = "file_remove"
 	TypeFSMove        = "fs_move"
 	TypeFSMkdir       = "fs_mkdir"
+	TypeFSHash        = "fs_hash"
 	TypeCapture       = "capture"
 	TypeDisplayRegion = "display_region"
 	TypeDisplayInfo   = "display_info"
@@ -89,6 +90,7 @@ const (
 	TypeFileRemoveResult   = "file_remove_result"
 	TypeFSMoveResult       = "fs_move_result"
 	TypeFSMkdirResult      = "fs_mkdir_result"
+	TypeFSHashResult       = "fs_hash_result"
 	TypeCaptureResult      = "capture_result"
 	TypeDisplayInfoResult  = "display_info_result"
 	TypePointerClickResult = "pointer_click_result"
@@ -215,6 +217,12 @@ type FSMoveResult struct {
 type FSMkdirResult struct {
 	Created bool   `json:"created"`
 	Path    string `json:"path"`
+}
+
+type FSHashResult struct {
+	Path string `json:"path"`
+	Hash string `json:"sha256"`
+	Size int64  `json:"size"`
 }
 
 type ScreenParams struct {

@@ -57,6 +57,10 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentFSRead(w, r, agentID)
 	case action == "fs-write" && r.Method == http.MethodPost:
 		s.handleAgentFSWrite(w, r, agentID)
+	case action == "fs-stat" && r.Method == http.MethodPost:
+		s.handleAgentFSStat(w, r, agentID)
+	case action == "fs-hash" && r.Method == http.MethodPost:
+		s.handleAgentFSHash(w, r, agentID)
 	case action == "capture" && r.Method == http.MethodPost:
 		s.handleAgentCapture(w, r, agentID)
 	case action == "task-list" && r.Method == http.MethodPost:
@@ -207,6 +211,7 @@ func (s *Server) handleAgentFSRead(w http.ResponseWriter, r *http.Request, agent
 
 
 // handleAgentFSWrite writes a file ON THE REMOTE AGENT via WebSocket.
+// Retries up to 3 times on transient failures (timeout, WS write error).
 func (s *Server) handleAgentFSWrite(w http.ResponseWriter, r *http.Request, agentID string) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -221,7 +226,69 @@ func (s *Server) handleAgentFSWrite(w http.ResponseWriter, r *http.Request, agen
 		return
 	}
 
-	resp, err := s.forwardToAgent(agentID, protocol.TypeFileSave, params)
+	// Retry loop: transient WS failures (timeout, brief disconnect) are common
+	// during large chunked transfers. Retry up to 3 times with 1s backoff.
+	var resp interface{}
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		resp, err = s.forwardToAgent(agentID, protocol.TypeFileSave, params)
+		if err == nil {
+			break
+		}
+		lastErr = err
+		time.Sleep(time.Second)
+	}
+	if lastErr != nil {
+		http.Error(w, lastErr.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+// handleAgentFSStat returns file stat (size, mode, modtime, is_dir, exists) from the remote agent.
+// POST /api/agent/{id}/fs-stat  body: {"path":"C:\	emp\\file.exe"}
+func (s *Server) handleAgentFSStat(w http.ResponseWriter, r *http.Request, agentID string) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	var params protocol.FSParams
+	if err := json.Unmarshal(body, &params); err != nil {
+		http.Error(w, fmt.Sprintf("invalid JSON: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	resp, err := s.forwardToAgent(agentID, protocol.TypeFSStat, params)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+// handleAgentFSHash returns SHA256 hash of a file on the remote agent.
+// POST /api/agent/{id}/fs-hash  body: {"path":"C:\	emp\\file.exe"}
+// Returns: {"path":"...","sha256":"abc123...","size":9321472}
+func (s *Server) handleAgentFSHash(w http.ResponseWriter, r *http.Request, agentID string) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	var params protocol.FSParams
+	if err := json.Unmarshal(body, &params); err != nil {
+		http.Error(w, fmt.Sprintf("invalid JSON: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	resp, err := s.forwardToAgent(agentID, protocol.TypeFSHash, params)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
@@ -343,8 +410,9 @@ func (s *Server) forwardToAgent(agentID string, msgType string, params interface
 func (s *Server) forwardToAgentWithTimeout(agentID string, msgType string, params interface{}, timeout time.Duration) (interface{}, error) {
 	s.mu.RLock()
 	conn, ok := s.conns[agentID]
+	writeMu, wmuOk := s.connWriteMu[agentID]
 	s.mu.RUnlock()
-	if !ok {
+	if !ok || !wmuOk {
 		return nil, fmt.Errorf("agent %s not connected", agentID)
 	}
 
@@ -369,7 +437,13 @@ func (s *Server) forwardToAgentWithTimeout(agentID string, msgType string, param
 		s.pendingMu.Unlock()
 	}()
 
-	if err := conn.WriteJSON(env); err != nil {
+	// Serialize WebSocket writes per-agent to prevent parallel write corruption.
+	// Concurrent WriteJSON calls on the same WebSocket connection can interleave
+	// frames, corrupting data — this was the root cause of binary upload corruption.
+	writeMu.Lock()
+	err := conn.WriteJSON(env)
+	writeMu.Unlock()
+	if err != nil {
 		return nil, fmt.Errorf("send to agent failed: %w", err)
 	}
 

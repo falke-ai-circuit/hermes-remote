@@ -42,6 +42,7 @@ type Server struct {
 
 	mu        sync.RWMutex
 	conns     map[string]*websocket.Conn // agentID -> conn
+	connWriteMu map[string]*sync.Mutex    // agentID -> write mutex (prevents parallel WS write corruption)
 
 	// pendingRequests maps request IDs to response channels for request-response
 	// over WebSocket. When handleAgentExec sends a command to an agent, it creates
@@ -85,6 +86,7 @@ func NewServer(addr string, token string, registryPath string) *Server {
 		sessions:      NewSessionManager(),
 		proxy:         NewLLMProxy(),
 		conns:         make(map[string]*websocket.Conn),
+		connWriteMu:   make(map[string]*sync.Mutex),
 		pendingReqs:   make(map[string]chan protocol.Envelope),
 		tunnels:       make(map[string]*Tunnel),
 		tokenExpiry:   make(map[string]time.Time),

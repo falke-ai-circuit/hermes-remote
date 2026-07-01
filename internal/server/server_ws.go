@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 	"github.com/falke-ai-circuit/hermes-remote/internal/protocol"
 	"github.com/gorilla/websocket"
@@ -63,6 +64,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Store connection
 	s.mu.Lock()
 	s.conns[agentID] = conn
+	s.connWriteMu[agentID] = &sync.Mutex{}
 	s.mu.Unlock()
 
 	// Track token expiry so the rotation goroutine can proactively rotate it.
@@ -89,6 +91,7 @@ func (s *Server) handleMessages(agentID string, conn *websocket.Conn) {
 		conn.Close()
 		s.mu.Lock()
 		delete(s.conns, agentID)
+		delete(s.connWriteMu, agentID)
 		s.mu.Unlock()
 		s.registry.Unregister(agentID)
 		s.sessions.RemoveSession(agentID)

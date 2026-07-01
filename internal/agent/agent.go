@@ -1,8 +1,10 @@
 package agent
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math/rand/v2"
 	"net/http"
@@ -301,6 +303,8 @@ func (a *Agent) handleCommand(conn *websocket.Conn, env protocol.Envelope) {
 		resp = a.handleFSMove(env)
 	case protocol.TypeFSMkdir:
 		resp = a.handleFSMkdir(env)
+	case protocol.TypeFSHash:
+		resp = a.handleFSHash(env)
 	case protocol.TypeCapture:
 		resp = a.handleCapture(env)
 	case protocol.TypeDisplayInfo:
@@ -505,6 +509,31 @@ func (a *Agent) handleFSMkdir(env protocol.Envelope) protocol.Envelope {
 		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
 	}
 	return protocol.NewResult(env.ID, protocol.TypeFSMkdirResult, result)
+}
+
+// handleFSHash computes SHA256 of a file on the agent.
+// Returns {path, sha256, size} — used for verifying chunked uploads.
+func (a *Agent) handleFSHash(env protocol.Envelope) protocol.Envelope {
+	params, err := protocol.ParseCommand[protocol.FSParams](env)
+	if err != nil {
+		return protocol.NewError(env.ID, protocol.ErrInvalidParams, err.Error())
+	}
+	f, err := os.Open(params.Path)
+	if err != nil {
+		return protocol.NewError(env.ID, protocol.ErrNotFound, err.Error())
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
+	}
+	stat, _ := f.Stat()
+	result := protocol.FSHashResult{
+		Path: params.Path,
+		Hash: fmt.Sprintf("%x", h.Sum(nil)),
+		Size: stat.Size(),
+	}
+	return protocol.NewResult(env.ID, protocol.TypeFSHashResult, result)
 }
 
 func (a *Agent) handleCapture(env protocol.Envelope) protocol.Envelope {
