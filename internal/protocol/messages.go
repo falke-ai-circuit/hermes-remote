@@ -132,6 +132,7 @@ type Envelope struct {
 	Params json.RawMessage `json:"params,omitempty"`
 	Result json.RawMessage `json:"result,omitempty"`
 	Error  *ErrorInfo      `json:"error,omitempty"`
+	Bypass bool            `json:"bypass,omitempty"` // when true, skip permission check (user-approved override)
 }
 
 // ErrorInfo represents an error response.

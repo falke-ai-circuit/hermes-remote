@@ -38,8 +38,9 @@ func (a *Agent) handleProcKill(env protocol.Envelope) protocol.Envelope {
 		return protocol.NewError(env.ID, protocol.ErrInvalidParams, err.Error())
 	}
 
-	// Sandbox check: in sandboxed mode, only kill PIDs this agent started
-	if a.cfg.Permissions == "sandboxed" || a.cfg.Permissions == "standard" {
+	// Sandbox check: in sandboxed mode, only kill PIDs this agent started.
+	// Bypass flag (user-approved override) skips this check.
+	if !env.Bypass && (a.cfg.Permissions == "sandboxed" || a.cfg.Permissions == "standard") {
 		a.spawnedPIDMu.Lock()
 		allowed := a.spawnedPIDs[params.PID]
 		a.spawnedPIDMu.Unlock()

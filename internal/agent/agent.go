@@ -336,7 +336,12 @@ func (a *Agent) handleCommand(conn *websocket.Conn, env protocol.Envelope) {
 			path = params.To // check destination path
 		}
 	}
-	if !isAllowed(a.cfg.Permissions, a.cfg.SandboxDir, env.Type, execCmd, path) {
+	// Bypass: user-approved override — skip permission check entirely.
+	// Logged for audit trail. The bypass flag is set by the server-side
+	// agent (Hermes) only after explicit user approval in DM.
+	if env.Bypass {
+		log.Printf("[PERMISSION BYPASS] type=%s cmd=%q path=%q — user-approved override, skipping permission check", env.Type, execCmd, path)
+	} else if !isAllowed(a.cfg.Permissions, a.cfg.SandboxDir, env.Type, execCmd, path) {
 		resp = protocol.NewError(env.ID, "permission_denied",
 			fmt.Sprintf("command type '%s' is not allowed under permissions '%s'", env.Type, a.cfg.Permissions))
 		if err := a.writeMessage(conn, resp); err != nil {
@@ -685,8 +690,9 @@ func (a *Agent) handleTaskStop(env protocol.Envelope) protocol.Envelope {
 		return protocol.NewError(env.ID, protocol.ErrInvalidParams, err.Error())
 	}
 
-	// Sandbox check: in sandboxed/standard mode, only kill PIDs this agent started
-	if a.cfg.Permissions == "sandboxed" || a.cfg.Permissions == "standard" {
+	// Sandbox check: in sandboxed/standard mode, only kill PIDs this agent started.
+	// Bypass flag (user-approved override) skips this check.
+	if !env.Bypass && (a.cfg.Permissions == "sandboxed" || a.cfg.Permissions == "standard") {
 		a.spawnedPIDMu.Lock()
 		allowed := a.spawnedPIDs[params.PID]
 		a.spawnedPIDMu.Unlock()
