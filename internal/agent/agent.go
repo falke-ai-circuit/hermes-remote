@@ -49,6 +49,9 @@ type Config struct {
 	// standard: read-only + exec (all commands) + fs-write + fs-mkdir + fs-move
 	// full: everything (no restrictions)
 	Permissions string
+	// SandboxDir restricts all filesystem operations to within this directory.
+	// Empty = no restriction. Combined with permissions tier for defense-in-depth.
+	SandboxDir string
 }
 
 // Agent is the remote agent instance.
@@ -297,15 +300,30 @@ func (a *Agent) handleConnection(conn *websocket.Conn) {
 func (a *Agent) handleCommand(conn *websocket.Conn, env protocol.Envelope) {
 	var resp protocol.Envelope
 
-	// Permission check: reject commands not allowed under the configured tier
-	// Extract command string for exec-type commands (used by read-only destructive filter)
+	// Permission check: extract command string (for exec destructive filter)
+	// and path (for fs sandbox check)
 	execCmd := ""
+	path := ""
 	if env.Type == protocol.TypeExec || env.Type == protocol.TypeExecPTY {
 		if params, err := protocol.ParseCommand[protocol.ExecParams](env); err == nil {
 			execCmd = params.Command
 		}
 	}
-	if !isAllowed(a.cfg.Permissions, env.Type, execCmd) {
+	// Extract path from FS params for sandbox checking
+	if env.Type == protocol.TypeFileSave || env.Type == protocol.TypeFileRemove ||
+		env.Type == protocol.TypeFSList || env.Type == protocol.TypeFSStat ||
+		env.Type == protocol.TypeFSRead || env.Type == protocol.TypeFSHash ||
+		env.Type == protocol.TypeFSMkdir {
+		if params, err := protocol.ParseCommand[protocol.FSParams](env); err == nil {
+			path = params.Path
+		}
+	}
+	if env.Type == protocol.TypeFSMove {
+		if params, err := protocol.ParseCommand[protocol.FSParams](env); err == nil {
+			path = params.To // check destination path
+		}
+	}
+	if !isAllowed(a.cfg.Permissions, a.cfg.SandboxDir, env.Type, execCmd, path) {
 		resp = protocol.NewError(env.ID, "permission_denied",
 			fmt.Sprintf("command type '%s' is not allowed under permissions '%s'", env.Type, a.cfg.Permissions))
 		if err := a.writeMessage(conn, resp); err != nil {

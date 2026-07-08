@@ -106,15 +106,12 @@ func (a *Agent) relayTargetToServer(connID string, target net.Conn) {
 					Data:      data,
 				}),
 			}
-			a.mu.Lock()
 			if a.conn != nil {
-				if err := a.conn.WriteJSON(env); err != nil {
+				if err := a.writeMessage(a.conn, env); err != nil {
 					log.Printf("[tunnel] send to server failed: %v", err)
-					a.mu.Unlock()
 					return
 				}
 			}
-			a.mu.Unlock()
 		}
 		if err != nil {
 			break

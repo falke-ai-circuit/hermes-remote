@@ -95,6 +95,8 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentDebugModules(w, r, agentID)
 	case action == "debug-mem-query" && r.Method == http.MethodPost:
 		s.handleAgentDebugMemQuery(w, r, agentID)
+	case action == "update" && r.Method == http.MethodPost:
+		s.handleAgentUpdate(w, r, agentID)
 	case action == "health" && r.Method == http.MethodGet:
 		s.handleAgentHealth(w, r, agentID)
 	default:

@@ -50,6 +50,10 @@ type Server struct {
 	pendingMu    sync.Mutex
 	pendingReqs  map[string]chan protocol.Envelope // requestID -> response channel
 
+	// pendingUpdates tracks agents that received an agent_update command.
+	// When the new agent connects, we use this to kill the old process.
+	pendingUpdates map[string]*pendingUpdate
+
 	// Tunnels: server-side TCP listeners that relay through WebSocket to the agent.
 	tunnelMu    sync.Mutex
 	tunnels     map[string]*Tunnel // tunnelID -> Tunnel
@@ -88,6 +92,7 @@ func NewServer(addr string, token string, registryPath string) *Server {
 		conns:         make(map[string]*websocket.Conn),
 		connWriteMu:   make(map[string]*sync.Mutex),
 		pendingReqs:   make(map[string]chan protocol.Envelope),
+		pendingUpdates: make(map[string]*pendingUpdate),
 		tunnels:       make(map[string]*Tunnel),
 		tokenExpiry:   make(map[string]time.Time),
 		rotatedTokens: make(map[string]string),

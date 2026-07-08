@@ -81,6 +81,10 @@ const (
 	TypeProcKillResult   = "proc_kill_result"
 	TypeProcStartResult  = "proc_start_result"
 
+	// Agent self-update (Server → Agent)
+	TypeAgentUpdate     = "agent_update"      // Server tells agent to download + start new binary
+	TypeAgentUpdateResult = "agent_update_result" // Agent confirms: new process started, old PID reported
+
 	// Results (Agent → Server)
 	TypeExecResult          = "exec_result"
 	TypeFSListResult       = "fs_list_result"
@@ -488,6 +492,28 @@ type ProcStartResult struct {
 	Stdout   string `json:"stdout,omitempty"`
 	Stderr   string `json:"stderr,omitempty"`
 	ExitCode int    `json:"exit_code"`
+}
+
+// AgentUpdateParams tells the agent to download and start a new version of itself.
+// The agent downloads the binary from the server's /download/ endpoint, verifies
+// its SHA256, renames the current binary as backup, writes the new binary, starts
+// it as a new process, and reports its own PID back so the server can kill it
+// once the new agent connects.
+type AgentUpdateParams struct {
+	DownloadURL string `json:"download_url"` // e.g. "http://server:80/download/HermesRemote_v9.exe"
+	Filename    string `json:"filename"`     // e.g. "HermesRemote_v9.exe"
+	SHA256      string `json:"sha256"`       // expected hash of the downloaded binary
+	Version     string `json:"version"`      // new version label (for logging)
+}
+
+// AgentUpdateResult is sent back to the server after the agent has successfully
+// started the new binary. OldPID is the PID of the current (soon-to-be-killed)
+// process. NewPID is the PID of the newly started process.
+type AgentUpdateResult struct {
+	Success  bool   `json:"success"`
+	OldPID   int    `json:"old_pid"`
+	NewPID   int    `json:"new_pid"`
+	Message  string `json:"message,omitempty"`
 }
 
 // NewError creates an error envelope.

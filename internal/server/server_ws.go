@@ -67,6 +67,32 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	s.connWriteMu[agentID] = &sync.Mutex{}
 	s.mu.Unlock()
 
+	// Check if this agent was recently updated. If so, the old process is
+	// still running (with the old PID). We need to kill it via the new agent.
+	s.pendingMu.Lock()
+	if pending, ok := s.pendingUpdates[agentID]; ok {
+		oldPID := pending.OldPID
+		delete(s.pendingUpdates, agentID)
+		s.pendingMu.Unlock()
+
+		log.Printf("[update] agent %s reconnected after update — scheduling kill of old PID %d", agentID, oldPID)
+
+		// Wait a moment for the new agent to be fully ready, then kill the old process.
+		// We send proc_kill to the NEW agent (which is now connected) to kill the OLD process.
+		go func() {
+			time.Sleep(3 * time.Second) // give new agent time to stabilize
+			killParams := protocol.TaskStopParams{PID: oldPID, Signal: 9}
+			_, err := s.forwardToAgentWithTimeout(agentID, protocol.TypeProcKill, killParams, 30*time.Second)
+			if err != nil {
+				log.Printf("[update] failed to kill old PID %d: %v (old process may have already exited)", oldPID, err)
+			} else {
+				log.Printf("[update] successfully killed old PID %d — update complete", oldPID)
+			}
+		}()
+	} else {
+		s.pendingMu.Unlock()
+	}
+
 	// Track token expiry so the rotation goroutine can proactively rotate it.
 	if s.tokenTTL > 0 {
 		s.SetTokenExpiry(agentID, time.Now().Add(s.tokenTTL))
@@ -159,6 +185,11 @@ func (s *Server) handleMessages(agentID string, conn *websocket.Conn) {
 					s.SetTokenExpiry(agentID, time.Now().Add(s.tokenTTL))
 				}
 			}
+
+		case protocol.TypeAgentUpdateResult:
+			// Agent confirmed it started the new binary. Record the old PID
+			// so we can kill it once the new agent connects.
+			s.handleAgentUpdateResult(agentID, env)
 
 		default:
 			// Check if this is a response to a pending request (exec, fs_read, etc.)

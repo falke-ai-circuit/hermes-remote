@@ -40,6 +40,7 @@ type ConfigFile struct {
 	CertFile    string `json:"certFile"`    // TLS cert for inbound server
 	KeyFile     string `json:"keyFile"`     // TLS key for inbound server
 	Permissions string `json:"permissions"` // "read-only", "standard", "full" (default: "full")
+	SandboxDir  string `json:"sandbox_dir"`  // restrict fs ops to this directory (empty = no restriction)
 }
 
 // printUsage writes a clean help/usage banner to stderr.
@@ -74,6 +75,8 @@ Config file fields:
                          read-only: fs-read, fs-list, fs-stat, fs-hash, exec (read-only commands)
                          standard: read-only + exec (all) + fs-write + fs-mkdir + fs-move
                          full: no restrictions
+  sandbox_dir  string  Restrict all filesystem operations to this directory (empty = no restriction)
+                         Example: "C:\\Users\\dna\\Downloads" — only that subtree is accessible
 
 Example config (hermes-remote.json):
 
@@ -170,6 +173,7 @@ func main() {
 		BackoffMax:     backoffMax,
 		TokenFile:      tokenFile,
 		Permissions:     fcfg.Permissions,
+		SandboxDir:      fcfg.SandboxDir,
 	}
 
 	// Ensure the WebSocket URL includes the /ws path the server expects

@@ -99,6 +99,27 @@ func (t *Tunnel) handleConn(connID string, localConn net.Conn) {
 		})
 	}()
 
+	// Send tunnel_open to agent and WAIT for response — the agent must
+	// connect to the target before we start relaying data.
+	openParams := map[string]interface{}{
+		"tunnel_id":    connID,
+		"target_host":  t.TargetHost,
+		"target_port":  t.TargetPort,
+	}
+
+	// Use forwardToAgentWithTimeout to wait for agent to confirm tunnel opened
+	resp, err := t.Server.forwardToAgentWithTimeout(t.AgentID, protocol.TypeTunnelOpen, openParams, 10*time.Second)
+	if err != nil {
+		log.Printf("[tunnel] tunnel_open failed for %s: %v", connID, err)
+		return
+	}
+	// Check if agent returned an error
+	if m, ok := resp.(map[string]interface{}); ok && m["error"] != nil {
+		log.Printf("[tunnel] agent rejected tunnel_open for %s: %v", connID, m["error"])
+		return
+	}
+	log.Printf("[tunnel] agent confirmed tunnel opened for %s", connID)
+
 	// Read from local connection, send to agent as tunnel_data
 	buf := make([]byte, 32*1024)
 	for {
@@ -147,14 +168,18 @@ func (t *Tunnel) Close() {
 }
 
 // sendToAgent sends a WebSocket message to the tunnel's agent.
+// Uses the per-agent write mutex to prevent concurrent WriteJSON corruption.
 func (t *Tunnel) sendToAgent(env protocol.Envelope) {
 	s := t.Server
 	s.mu.RLock()
 	conn, ok := s.conns[t.AgentID]
+	writeMu, wmuOk := s.connWriteMu[t.AgentID]
 	s.mu.RUnlock()
-	if !ok {
+	if !ok || !wmuOk {
 		return
 	}
+	writeMu.Lock()
+	defer writeMu.Unlock()
 	if err := conn.WriteJSON(env); err != nil {
 		log.Printf("[tunnel] send to agent failed: %v", err)
 	}
