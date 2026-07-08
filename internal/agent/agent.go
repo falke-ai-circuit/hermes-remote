@@ -44,6 +44,11 @@ type Config struct {
 	BackoffMin     time.Duration // default 1s
 	BackoffMax     time.Duration // default 60s
 	TokenFile      string        // path to persist token (empty = no persistence)
+	// Permissions tier: "read-only", "standard", "full" (default: "full")
+	// read-only: fs-read, fs-list, fs-stat, fs-hash, exec (read-only commands only)
+	// standard: read-only + exec (all commands) + fs-write + fs-mkdir + fs-move
+	// full: everything (no restrictions)
+	Permissions string
 }
 
 // Agent is the remote agent instance.
@@ -52,6 +57,7 @@ type Agent struct {
 	conn           *websocket.Conn
 	connectedAt    time.Time
 	mu             sync.Mutex
+	writeMu        sync.Mutex // protects WebSocket writes (prevents concurrent WriteJSON panic)
 	lastPing       time.Time
 	pingMisses     int
 	backoffAttempt int
@@ -66,6 +72,14 @@ type Agent struct {
 	// issued a rotating token with an expiry. A zero value means "no expiry".
 	// Guarded by mu alongside cfg.Token.
 	tokenExpiry time.Time
+}
+
+// writeMessage sends a WebSocket message with write mutex protection.
+// gorilla/websocket panics on concurrent writes — this must be used for ALL writes.
+func (a *Agent) writeMessage(conn *websocket.Conn, env protocol.Envelope) error {
+	a.writeMu.Lock()
+	defer a.writeMu.Unlock()
+	return protocol.WriteMessage(conn, env)
 }
 
 // New creates a new agent.
@@ -199,7 +213,7 @@ func (a *Agent) handleConnection(conn *websocket.Conn) {
 		Mode:            a.cfg.Mode,
 		ProtocolVersion: "2",
 	}
-	if err := protocol.WriteMessage(conn, protocol.Envelope{
+	if err := a.writeMessage(conn, protocol.Envelope{
 		ID:     "agent-info",
 		Type:   "agent_info",
 		Result: mustMarshal(info),
@@ -232,7 +246,7 @@ func (a *Agent) handleConnection(conn *websocket.Conn) {
 			var env protocol.Envelope
 			if err := json.Unmarshal(msg, &env); err != nil {
 				resp := protocol.NewError("", protocol.ErrInvalidParams, "invalid JSON")
-				protocol.WriteMessage(conn, resp)
+				a.writeMessage(conn, resp)
 				continue
 			}
 			a.handleCommand(conn, env)
@@ -253,7 +267,7 @@ func (a *Agent) handleConnection(conn *websocket.Conn) {
 				return
 			}
 			a.mu.Unlock()
-			if err := protocol.WriteMessage(conn, protocol.Envelope{
+			if err := a.writeMessage(conn, protocol.Envelope{
 				ID:   fmt.Sprintf("ping-%d", time.Now().UnixMilli()),
 				Type: protocol.TypePing,
 			}); err != nil {
@@ -272,7 +286,7 @@ func (a *Agent) handleConnection(conn *websocket.Conn) {
 					ID:   fmt.Sprintf("token-refresh-%d", time.Now().UnixMilli()),
 					Type: protocol.TypeTokenRefresh,
 				}
-				if err := protocol.WriteMessage(conn, refreshEnv); err != nil {
+				if err := a.writeMessage(conn, refreshEnv); err != nil {
 					log.Printf("token refresh request failed: %v", err)
 				}
 			}
@@ -282,9 +296,33 @@ func (a *Agent) handleConnection(conn *websocket.Conn) {
 
 func (a *Agent) handleCommand(conn *websocket.Conn, env protocol.Envelope) {
 	var resp protocol.Envelope
+
+	// Permission check: reject commands not allowed under the configured tier
+	// Extract command string for exec-type commands (used by read-only destructive filter)
+	execCmd := ""
+	if env.Type == protocol.TypeExec || env.Type == protocol.TypeExecPTY {
+		if params, err := protocol.ParseCommand[protocol.ExecParams](env); err == nil {
+			execCmd = params.Command
+		}
+	}
+	if !isAllowed(a.cfg.Permissions, env.Type, execCmd) {
+		resp = protocol.NewError(env.ID, "permission_denied",
+			fmt.Sprintf("command type '%s' is not allowed under permissions '%s'", env.Type, a.cfg.Permissions))
+		if err := a.writeMessage(conn, resp); err != nil {
+			log.Printf("write error: %v", err)
+		}
+		return
+	}
+
 	switch env.Type {
 	case protocol.TypePing:
 		resp = protocol.NewPong(env.ID)
+	case protocol.TypePong:
+		// Server responded to our ping — reset miss counter, no response needed.
+		a.mu.Lock()
+		a.pingMisses = 0
+		a.mu.Unlock()
+		return
 	case protocol.TypeExec:
 		resp = a.handleExec(env)
 	case protocol.TypeExecPTY:
@@ -361,10 +399,12 @@ func (a *Agent) handleCommand(conn *websocket.Conn, env protocol.Envelope) {
 		resp = a.handleDebugModules(env)
 	case protocol.TypeDebugMemQuery:
 		resp = a.handleDebugMemQuery(env)
+	case protocol.TypeAgentUpdate:
+		resp = a.handleAgentUpdate(env)
 	default:
 		resp = protocol.NewError(env.ID, protocol.ErrInvalidParams, fmt.Sprintf("unknown command: %s", env.Type))
 	}
-	if err := protocol.WriteMessage(conn, resp); err != nil {
+	if err := a.writeMessage(conn, resp); err != nil {
 		log.Printf("write error: %v", err)
 	}
 }
@@ -776,13 +816,13 @@ func (a *Agent) SendPrompt(prompt string) {
 			Timeout: defaultTimeout,
 		}),
 	}
-	if err := protocol.WriteMessage(conn, env); err != nil {
+	if err := a.writeMessage(conn, env); err != nil {
 		log.Printf("send prompt error: %v", err)
 	}
 }
 
 // Version is the agent version.
-const Version = "0.1.0"
+const Version = "0.2.2"
 
 func getOS() string   { return runtime.GOOS }
 func getArch() string { return runtime.GOARCH }

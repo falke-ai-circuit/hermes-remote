@@ -25,20 +25,21 @@ var configPath = flag.String("config", "hermes-remote.json", "Path to JSON confi
 
 // ConfigFile is the JSON structure for the config file.
 type ConfigFile struct {
-	Server     string `json:"server"`      // e.g. "ws://100.64.0.1:7700"
-	Token      string `json:"token"`       // auth token
-	Name       string `json:"name"`        // display name for this agent
-	Mode       string `json:"mode"`        // "silent" or "interactive"
-	Listen     string `json:"listen"`     // inbound listen address (optional)
-	MaxRetries int    `json:"maxRetries"` // 0 = infinite
-	BackoffMin string `json:"backoffMin"` // e.g. "1s"
-	BackoffMax string `json:"backoffMax"` // e.g. "60s"
-	TokenFile  string `json:"tokenFile"`  // path to persist rotated token
-	Cert       string `json:"cert"`       // CA cert for wss:// verification
-	ClientCert string `json:"clientCert"` // client cert for mTLS
-	ClientKey  string `json:"clientKey"`  // client key for mTLS
-	CertFile   string `json:"certFile"`   // TLS cert for inbound server
-	KeyFile    string `json:"keyFile"`    // TLS key for inbound server
+	Server      string `json:"server"`      // e.g. "ws://100.64.0.1:7700"
+	Token       string `json:"token"`       // auth token
+	Name        string `json:"name"`        // display name for this agent
+	Mode        string `json:"mode"`        // "silent" or "interactive"
+	Listen      string `json:"listen"`      // inbound listen address (optional)
+	MaxRetries  int    `json:"maxRetries"`  // 0 = infinite
+	BackoffMin  string `json:"backoffMin"`  // e.g. "1s"
+	BackoffMax  string `json:"backoffMax"`  // e.g. "60s"
+	TokenFile   string `json:"tokenFile"`   // path to persist rotated token
+	Cert        string `json:"cert"`        // CA cert for wss:// verification
+	ClientCert  string `json:"clientCert"`  // client cert for mTLS
+	ClientKey   string `json:"clientKey"`   // client key for mTLS
+	CertFile    string `json:"certFile"`    // TLS cert for inbound server
+	KeyFile     string `json:"keyFile"`     // TLS key for inbound server
+	Permissions string `json:"permissions"` // "read-only", "standard", "full" (default: "full")
 }
 
 // printUsage writes a clean help/usage banner to stderr.
@@ -69,6 +70,10 @@ Config file fields:
   clientKey    string  Client key file (PEM) for mTLS on outbound wss://
   certFile     string  TLS certificate file (PEM) for inbound server mode
   keyFile      string  TLS key file (PEM) for inbound server mode
+  permissions  string  Permission tier: "read-only", "standard", or "full" (default: "full")
+                         read-only: fs-read, fs-list, fs-stat, fs-hash, exec (read-only commands)
+                         standard: read-only + exec (all) + fs-write + fs-mkdir + fs-move
+                         full: no restrictions
 
 Example config (hermes-remote.json):
 
@@ -164,6 +169,7 @@ func main() {
 		BackoffMin:     backoffMin,
 		BackoffMax:     backoffMax,
 		TokenFile:      tokenFile,
+		Permissions:     fcfg.Permissions,
 	}
 
 	// Ensure the WebSocket URL includes the /ws path the server expects
