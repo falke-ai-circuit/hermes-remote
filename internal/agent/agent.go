@@ -71,6 +71,11 @@ type Agent struct {
 	mitmMgr        *mitmManager
 	debugMgr       *debugManager
 
+	// spawnedPIDs tracks PIDs of processes started by this agent (proc_start or exec).
+	// In sandboxed mode, only these PIDs can be killed — protecting other system processes.
+	spawnedPIDs   map[int]bool
+	spawnedPIDMu  sync.Mutex
+
 	// tokenExpiry is the expiry time of the current token, if the server has
 	// issued a rotating token with an expiry. A zero value means "no expiry".
 	// Guarded by mu alongside cfg.Token.
@@ -87,13 +92,21 @@ func (a *Agent) writeMessage(conn *websocket.Conn, env protocol.Envelope) error 
 
 // New creates a new agent.
 func New(cfg Config) *Agent {
+	// Auto-sandbox: if permissions is "sandboxed" and sandbox_dir is empty,
+	// use the current working directory as the sandbox.
+	if cfg.Permissions == "sandboxed" && cfg.SandboxDir == "" {
+		if cwd, err := os.Getwd(); err == nil {
+			cfg.SandboxDir = cwd
+		}
+	}
 	return &Agent{
-		cfg:       cfg,
-		stopped:   make(chan struct{}),
-		plat:      platform.New(cfg.Name),
-		tunnelMgr: newTunnelManager(),
-		mitmMgr:   newMitmManager(),
-		debugMgr:  newDebugManager(),
+		cfg:          cfg,
+		stopped:      make(chan struct{}),
+		plat:         platform.New(cfg.Name),
+		tunnelMgr:    newTunnelManager(),
+		mitmMgr:      newMitmManager(),
+		debugMgr:     newDebugManager(),
+		spawnedPIDs:  make(map[int]bool),
 	}
 }
 
@@ -671,9 +684,27 @@ func (a *Agent) handleTaskStop(env protocol.Envelope) protocol.Envelope {
 	if err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInvalidParams, err.Error())
 	}
+
+	// Sandbox check: in sandboxed/standard mode, only kill PIDs this agent started
+	if a.cfg.Permissions == "sandboxed" || a.cfg.Permissions == "standard" {
+		a.spawnedPIDMu.Lock()
+		allowed := a.spawnedPIDs[params.PID]
+		a.spawnedPIDMu.Unlock()
+		if !allowed {
+			return protocol.NewError(env.ID, "permission_denied",
+				fmt.Sprintf("cannot kill PID %d: process was not started by this agent (sandboxed mode protects system processes)", params.PID))
+		}
+	}
+
 	if err := a.plat.ProcessKill(params.PID, params.Signal); err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInternal, err.Error())
 	}
+
+	// Remove from tracked PIDs
+	a.spawnedPIDMu.Lock()
+	delete(a.spawnedPIDs, params.PID)
+	a.spawnedPIDMu.Unlock()
+
 	return protocol.NewResult(env.ID, protocol.TypeTaskStopResult, protocol.TaskStopResult{Killed: true, PID: params.PID})
 }
 

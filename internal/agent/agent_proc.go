@@ -30,10 +30,23 @@ func (a *Agent) handleProcList(env protocol.Envelope) protocol.Envelope {
 }
 
 // handleProcKill kills a process by PID.
+// In sandboxed mode, only processes started by this agent (via proc_start or exec)
+// can be killed — protecting other system processes.
 func (a *Agent) handleProcKill(env protocol.Envelope) protocol.Envelope {
 	params, err := protocol.ParseCommand[protocol.TaskStopParams](env)
 	if err != nil {
 		return protocol.NewError(env.ID, protocol.ErrInvalidParams, err.Error())
+	}
+
+	// Sandbox check: in sandboxed mode, only kill PIDs this agent started
+	if a.cfg.Permissions == "sandboxed" || a.cfg.Permissions == "standard" {
+		a.spawnedPIDMu.Lock()
+		allowed := a.spawnedPIDs[params.PID]
+		a.spawnedPIDMu.Unlock()
+		if !allowed {
+			return protocol.NewError(env.ID, "permission_denied",
+				fmt.Sprintf("cannot kill PID %d: process was not started by this agent (sandboxed mode protects system processes)", params.PID))
+		}
 	}
 
 	var killErr error
@@ -52,11 +65,18 @@ func (a *Agent) handleProcKill(env protocol.Envelope) protocol.Envelope {
 		return protocol.NewError(env.ID, protocol.ErrInternal, fmt.Sprintf("kill failed: %v", killErr))
 	}
 
+	// Remove from tracked PIDs
+	a.spawnedPIDMu.Lock()
+	delete(a.spawnedPIDs, params.PID)
+	a.spawnedPIDMu.Unlock()
+
 	return protocol.NewResult(env.ID, protocol.TypeProcKillResult, protocol.TaskStopResult{Killed: true, PID: params.PID})
 }
 
 // handleProcStart starts a process. If background=true, uses start /b on Windows
 // or & on Unix. Otherwise runs synchronously and returns output.
+// PIDs of started processes are tracked so sandboxed mode can restrict
+// task_stop/proc_kill to only processes this agent started.
 func (a *Agent) handleProcStart(env protocol.Envelope) protocol.Envelope {
 	params, err := protocol.ParseCommand[protocol.ProcStartParams](env)
 	if err != nil {
@@ -77,8 +97,13 @@ func (a *Agent) handleProcStart(env protocol.Envelope) protocol.Envelope {
 		if err := cmd.Start(); err != nil {
 			return protocol.NewError(env.ID, protocol.ErrInternal, fmt.Sprintf("start failed: %v", err))
 		}
+		pid := cmd.Process.Pid
+		// Track PID for sandboxed mode
+		a.spawnedPIDMu.Lock()
+		a.spawnedPIDs[pid] = true
+		a.spawnedPIDMu.Unlock()
 		return protocol.NewResult(env.ID, protocol.TypeProcStartResult, protocol.ProcStartResult{
-			PID:      cmd.Process.Pid,
+			PID:      pid,
 			ExitCode: 0,
 		})
 	}

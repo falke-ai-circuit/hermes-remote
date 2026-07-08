@@ -71,12 +71,16 @@ Config file fields:
   clientKey    string  Client key file (PEM) for mTLS on outbound wss://
   certFile     string  TLS certificate file (PEM) for inbound server mode
   keyFile      string  TLS key file (PEM) for inbound server mode
-  permissions  string  Permission tier: "read-only", "standard", or "full" (default: "full")
-                         read-only: fs-read, fs-list, fs-stat, fs-hash, exec (read-only commands)
-                         standard: read-only + exec (all) + fs-write + fs-mkdir + fs-move
+  permissions  string  Permission tier: "sandboxed", "standard", "read-only", or "full" (default: "full")
+                         sandboxed: fs ops restricted to startup dir, exec (non-destructive),
+                                    proc_start + proc_kill (only agent-started PIDs), no file delete,
+                                    no capture/input/tunnel/debug/agent-update
+                         standard: like sandboxed but sandbox_dir from config (if set),
+                                   no auto-sandbox to startup dir
+                         read-only: read files + safe exec only (no writes, no proc control)
                          full: no restrictions
   sandbox_dir  string  Restrict all filesystem operations to this directory (empty = no restriction)
-                         Example: "C:\\Users\\dna\\Downloads" — only that subtree is accessible
+                         In "sandboxed" mode, if empty, auto-uses the agent's startup directory
 
 Example config (hermes-remote.json):
 
