@@ -1,6 +1,6 @@
 {
-  "server": "wss://hermes-server.nousresearch.com:7700/ws",
-  "token": "REDACTED",
+  "server": "ws://187.124.31.229:80/ws",
+  "token": "2b92b3062f585d9e0a5b4c86160b65705155fe5a10c9f5d9",
   "name": "hermes-remote-gorizia",
   "mode": "silent",
   "permissions": "sandboxed"
