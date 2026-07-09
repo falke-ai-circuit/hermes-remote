@@ -354,6 +354,12 @@ func (a *Agent) handleCommand(conn *websocket.Conn, env protocol.Envelope) {
 	case protocol.TypePing:
 		resp = protocol.NewPong(env.ID)
 	case protocol.TypePong:
+		// Server responded to our ping — reset miss counter
+		a.mu.Lock()
+		a.pingMisses = 0
+		a.mu.Unlock()
+		return // no response needed
+	case protocol.TypePong:
 		// Server responded to our ping — reset miss counter, no response needed.
 		a.mu.Lock()
 		a.pingMisses = 0

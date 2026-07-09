@@ -52,8 +52,11 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	hostname, _ := os.Hostname()
-	agentID := fmt.Sprintf("a0-%s", hostname)
+	agentID := info.Name
+	if agentID == "" {
+		hostname, _ := os.Hostname()
+		agentID = fmt.Sprintf("a0-%s", hostname)
+	}
 
 	// Register agent
 	s.registry.Register(agentID, info.Name, info.Version, info.OS, info.Arch, info.Mode)
