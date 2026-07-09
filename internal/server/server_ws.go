@@ -52,6 +52,8 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Use agent's configured name as ID (unique per agent).
+	// Falls back to server hostname if name is empty (backward compat).
 	agentID := info.Name
 	if agentID == "" {
 		hostname, _ := os.Hostname()
