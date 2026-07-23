@@ -74,6 +74,7 @@ type Agent struct {
 	tunnelMgr      *tunnelManager
 	mitmMgr        *mitmManager
 	debugMgr       *debugManager
+	streamMgr      *streamManager
 
 	// spawnedPIDs tracks PIDs of processes started by this agent (proc_start or exec).
 	// In sandboxed mode, only these PIDs can be killed — protecting other system processes.
@@ -222,6 +223,7 @@ func (a *Agent) handleConnection(conn *websocket.Conn) {
 		a.closeAllTunnels()
 		a.closeAllMitm()
 		a.closeAllDebug()
+		a.closeAllStreams()
 	}()
 
 	// Send agent info
@@ -386,6 +388,10 @@ func (a *Agent) handleCommand(conn *websocket.Conn, env protocol.Envelope) {
 		resp = a.handleFSHash(env)
 	case protocol.TypeCapture:
 		resp = a.handleCapture(env)
+	case protocol.TypeStreamBegin:
+		resp = a.handleStreamBegin(env)
+	case protocol.TypeStreamEnd:
+		resp = a.handleStreamEnd(env)
 	case protocol.TypeDisplayInfo:
 		resp = a.handleDisplayInfo(env)
 	case protocol.TypePointerClick:

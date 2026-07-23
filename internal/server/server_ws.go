@@ -215,6 +215,11 @@ func (s *Server) handleMessages(agentID string, conn *websocket.Conn) {
 			// so we can kill it once the new agent connects.
 			s.handleAgentUpdateResult(agentID, env)
 
+		case protocol.TypeStreamData:
+			// Agent sent a screen stream frame. Store it in session memory.
+			// In a full implementation this would forward to connected viewers.
+			s.sessions.AddMemory(agentID, "last_stream_frame", string(env.Result))
+
 		default:
 			// Check if this is a response to a pending request (exec, fs_read, etc.)
 			s.pendingMu.Lock()

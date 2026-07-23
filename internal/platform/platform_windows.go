@@ -187,7 +187,65 @@ func (p *windowsPlatform) Exec(command string, timeout int, workDir string, env 
 // and file manager. These return "not available" if called.
 
 func (p *windowsPlatform) CaptureDisplay(display int, quality int) (protocol.CaptureResult, error) {
-	return protocol.CaptureResult{}, fmt.Errorf("display capture not available")
+	// Capture screen using PowerShell + System.Drawing.
+	// This encodes the captured screen as JPEG and outputs base64 to stdout.
+	if quality <= 0 {
+		quality = 80
+	}
+	script := fmt.Sprintf(`Add-Type -AssemblyName System.Drawing,System.Windows.Forms
+$bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+$bmp = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
+$graphics = [System.Drawing.Graphics]::FromImage($bmp)
+$graphics.CopyFromScreen($bounds.X, $bounds.Y, 0, 0, $bmp.Size)
+$ms = New-Object System.IO.MemoryStream
+$encoder = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' }
+$params = New-Object System.Drawing.Imaging.EncoderParameters(1)
+$params.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter([System.Drawing.Imaging.Encoder]::Quality, [long]%d)
+$bmp.Save($ms, $encoder, $params)
+[Convert]::ToBase64String($ms.ToArray())
+$graphics.Dispose()
+$bmp.Dispose()
+$ms.Dispose()`, quality)
+
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
+	out, err := cmd.Output()
+	if err != nil {
+		return protocol.CaptureResult{}, fmt.Errorf("screen capture failed: %w", err)
+	}
+	// Trim trailing whitespace/newlines from PowerShell output
+	data := strings.TrimSpace(string(out))
+	bounds := getWindowsScreenBounds()
+	return protocol.CaptureResult{
+		Format:    "jpeg",
+		Width:     bounds.Width,
+		Height:    bounds.Height,
+		Data:      data,
+		SizeBytes: int64(len(data)),
+	}, nil
+}
+
+// screenBounds holds the virtual screen dimensions.
+type screenBounds struct {
+	Width  int
+	Height int
+}
+
+// getWindowsScreenBounds returns the virtual screen dimensions via PowerShell.
+// Falls back to 1920x1080 if the query fails.
+func getWindowsScreenBounds() screenBounds {
+	script := `Add-Type -AssemblyName System.Windows.Forms
+$b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+"$($b.Width)x$($b.Height)"`
+	out, err := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script).Output()
+	if err != nil {
+		return screenBounds{Width: 1920, Height: 1080}
+	}
+	var w, h int
+	fmt.Sscanf(strings.TrimSpace(string(out)), "%dx%d", &w, &h)
+	if w <= 0 || h <= 0 {
+		return screenBounds{Width: 1920, Height: 1080}
+	}
+	return screenBounds{Width: w, Height: h}
 }
 
 func (p *windowsPlatform) ScreenInfo() protocol.ScreenInfo {
@@ -195,11 +253,25 @@ func (p *windowsPlatform) ScreenInfo() protocol.ScreenInfo {
 }
 
 func (p *windowsPlatform) ScreenStreamStart(display int, fps int, quality int) (protocol.ScreenStreamStartResult, error) {
-	return protocol.ScreenStreamStartResult{}, fmt.Errorf("streaming not available")
+	// Screen streaming on Windows uses PowerShell + System.Drawing to capture
+	// frames. The actual frame capture loop runs in the agent's streamFrames
+	// goroutine, which calls CaptureDisplay repeatedly. We validate that
+	// PowerShell is available and return a stream ID.
+	if _, err := exec.LookPath("powershell"); err != nil {
+		return protocol.ScreenStreamStartResult{}, fmt.Errorf("streaming requires powershell (not found)")
+	}
+	if fps <= 0 {
+		fps = 10
+	}
+	streamID := fmt.Sprintf("stream-%d", time.Now().UnixNano())
+	return protocol.ScreenStreamStartResult{
+		StreamID: streamID,
+	}, nil
 }
 
 func (p *windowsPlatform) ScreenStreamStop(streamID string) error {
-	return fmt.Errorf("streaming not available")
+	// Frame capture is stopped by the agent's stream manager
+	return nil
 }
 
 func (p *windowsPlatform) Click(x int, y int, button string) error {

@@ -98,6 +98,9 @@ type Server struct {
 	// Task scheduler: delayed, recurring, and offline-queued tasks.
 	tasks *TaskManager
 
+	// File transfer manager: resumable chunked file transfers.
+	transferMgr *TransferManager
+
 	// uiWrapper wraps the mux with an embedded-frontend handler for serving
 	// the React WebUI. When nil (frontend not built), Start/StartTLS uses
 	// the mux directly.
@@ -134,6 +137,7 @@ func NewServer(addr string, token string, registryPath string) *Server {
 		builder:       NewBuilderManager("", ""),
 		profiles:      NewProfileManager(""),
 		tasks:         NewTaskManager("", nil),
+		transferMgr:   NewTransferManager(""),
 	}
 }
 
@@ -362,6 +366,13 @@ func (s *Server) SetProfilesPath(path string) {
 // called before Start/StartTLS.
 func (s *Server) SetTasksPath(path string) {
 	s.tasks = NewTaskManager(path, s)
+}
+
+// SetTransferPath configures persistent file transfer state. When set,
+// transfer records are loaded from / persisted to the given file path so
+// transfers can survive server restart. Must be called before Start/StartTLS.
+func (s *Server) SetTransferPath(path string) {
+	s.transferMgr = NewTransferManager(path)
 }
 
 // operatorContextKey is the context key used to store the authenticated

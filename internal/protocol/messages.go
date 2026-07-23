@@ -43,6 +43,7 @@ const (
 	TypeAuthRequest    = "auth_request"    // DEPRECATED alias for TypeTokenRefresh (backward compat)
 	TypeStreamBegin   = "stream_begin"
 	TypeStreamEnd     = "stream_end"
+	TypeStreamData    = "stream_data" // Agent → Server: individual video frame (base64 JPEG)
 
 	// TCP tunnel — Server → Agent: open a tunnel to a target host:port
 	TypeTunnelOpen    = "tunnel_open"
@@ -310,6 +311,17 @@ type ScreenStreamStartResult struct {
 
 type ScreenStreamStopParams struct {
 	StreamID string `json:"stream_id"`
+}
+
+// StreamDataParams carries a single video frame from agent to server during
+// screen streaming. Each frame is a base64-encoded JPEG image.
+type StreamDataParams struct {
+	StreamID string `json:"stream_id"`
+	Frame    string `json:"frame"`       // base64 JPEG
+	Width    int    `json:"width"`
+	Height   int    `json:"height"`
+	SeqNum   int    `json:"seq_num"`     // monotonically increasing frame number
+	Timestamp int64 `json:"timestamp"`   // Unix millisecond timestamp
 }
 
 type InputParams struct {

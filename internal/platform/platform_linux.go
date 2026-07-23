@@ -211,11 +211,24 @@ func (p *linuxPlatform) ScreenInfo() protocol.ScreenInfo {
 }
 
 func (p *linuxPlatform) ScreenStreamStart(display int, fps int, quality int) (protocol.ScreenStreamStartResult, error) {
-	return protocol.ScreenStreamStartResult{}, fmt.Errorf("streaming not implemented")
+	// Check if ffmpeg is available for x11grab-based streaming
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		return protocol.ScreenStreamStartResult{}, fmt.Errorf("streaming requires ffmpeg (not found)")
+	}
+	if fps <= 0 {
+		fps = 10
+	}
+	streamID := fmt.Sprintf("stream-%d", time.Now().UnixNano())
+	// The actual frame capture is handled by the agent's streamFrames goroutine
+	// which calls CaptureDisplay. We just validate that capture is possible.
+	return protocol.ScreenStreamStartResult{
+		StreamID: streamID,
+	}, nil
 }
 
 func (p *linuxPlatform) ScreenStreamStop(streamID string) error {
-	return fmt.Errorf("streaming not implemented")
+	// Frame capture is stopped by the agent's stream manager
+	return nil
 }
 
 func (p *linuxPlatform) Click(x int, y int, button string) error	{ return osExec("xdotool", "mousemove", fmt.Sprint(x), fmt.Sprint(y), "click", "1") }

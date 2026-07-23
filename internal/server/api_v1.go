@@ -331,6 +331,22 @@ func (s *Server) registerV1Routes() {
 	s.mux.HandleFunc("GET /api/v1/tasks", s.handleV1ListTasks)
 	s.mux.HandleFunc("GET /api/v1/tasks/{id}", s.handleV1GetTask)
 	s.mux.HandleFunc("DELETE /api/v1/tasks/{id}", s.handleV1CancelTask)
+
+	// File transfers (resumable chunked)
+	s.mux.HandleFunc("POST /api/v1/agents/{id}/transfer", s.handleV1CreateTransfer)
+	s.mux.HandleFunc("GET /api/v1/transfers", s.handleV1ListTransfers)
+	s.mux.HandleFunc("GET /api/v1/transfers/{id}", s.handleV1GetTransfer)
+	s.mux.HandleFunc("POST /api/v1/transfers/{id}/pause", s.handleV1PauseTransfer)
+	s.mux.HandleFunc("POST /api/v1/transfers/{id}/resume", s.handleV1ResumeTransfer)
+	s.mux.HandleFunc("POST /api/v1/transfers/{id}/verify", s.handleV1VerifyTransfer)
+
+	// File download (v1)
+	s.mux.HandleFunc("GET /api/v1/downloads/{filename}", s.handleV1FileDownload)
+	s.mux.HandleFunc("POST /api/v1/agents/{id}/file-download", s.handleV1AgentFileDownload)
+
+	// Screen streaming (v1)
+	s.mux.HandleFunc("POST /api/v1/agents/{id}/stream-start", s.handleV1StreamStart)
+	s.mux.HandleFunc("POST /api/v1/agents/{id}/stream-stop", s.handleV1StreamStop)
 }
 
 // ---------------------------------------------------------------------------
