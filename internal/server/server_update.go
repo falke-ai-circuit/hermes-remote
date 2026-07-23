@@ -99,7 +99,7 @@ func (s *Server) handleAgentUpdate(w http.ResponseWriter, r *http.Request, agent
 	// connection drops when the new process takes over. So we use a short
 	// timeout and treat timeout as "update in progress" — the server's
 	// handleWebSocket will detect the new agent and auto-kill the old PID.
-	resp, err := s.forwardToAgentWithTimeout(agentID, protocol.TypeAgentUpdate, updateParams, 30*time.Second)
+	resp, err := s.forwardToAgentWithTimeout(agentID, protocol.TypeAgentUpdate, updateParams, 30*time.Second, operatorIDFromRequest(r))
 	if err != nil {
 		// Timeout is expected — the agent starts the new process and the old
 		// connection drops. The update result arrives via the agent_update_result

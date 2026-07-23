@@ -108,7 +108,7 @@ func (t *Tunnel) handleConn(connID string, localConn net.Conn) {
 	}
 
 	// Use forwardToAgentWithTimeout to wait for agent to confirm tunnel opened
-	resp, err := t.Server.forwardToAgentWithTimeout(t.AgentID, protocol.TypeTunnelOpen, openParams, 10*time.Second)
+	resp, err := t.Server.forwardToAgentWithTimeout(t.AgentID, protocol.TypeTunnelOpen, openParams, 10*time.Second, "")
 	if err != nil {
 		log.Printf("[tunnel] tunnel_open failed for %s: %v", connID, err)
 		return

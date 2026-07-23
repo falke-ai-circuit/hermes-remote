@@ -87,7 +87,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			time.Sleep(3 * time.Second) // give new agent time to stabilize
 			killParams := protocol.TaskStopParams{PID: oldPID, Signal: 9}
-			_, err := s.forwardToAgentWithTimeout(agentID, protocol.TypeProcKill, killParams, 30*time.Second)
+			_, err := s.forwardToAgentWithTimeout(agentID, protocol.TypeProcKill, killParams, 30*time.Second, "")
 			if err != nil {
 				log.Printf("[update] failed to kill old PID %d: %v (old process may have already exited)", oldPID, err)
 			} else {

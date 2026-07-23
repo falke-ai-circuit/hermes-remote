@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -49,6 +50,17 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleFileDownloadBody(w, r)
 		return
 	}
+
+	// RBAC: check operator permissions for the requested action and set
+	// the operator in the request context for audit logging.
+	rbacAction := actionToRBAC(action)
+	op, ok := s.checkOperatorAuth(r, rbacAction)
+	if !ok {
+		s.auditDenied(agentID, rbacAction, op)
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	r = r.WithContext(context.WithValue(r.Context(), operatorContextKey{}, op))
 
 	switch {
 	case action == "exec" && r.Method == http.MethodPost:
@@ -109,6 +121,14 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 	if !s.checkAPIAuth(w, r) {
 		return
 	}
+	// RBAC: viewers and above can list agents.
+	op, ok := s.checkOperatorAuth(r, "list")
+	if !ok {
+		s.auditDenied("", "list", op)
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	r = r.WithContext(context.WithValue(r.Context(), operatorContextKey{}, op))
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -143,7 +163,7 @@ func (s *Server) handleAgentExec(w http.ResponseWriter, r *http.Request, agentID
 	}
 
 	timeout := time.Duration(params.Timeout) * time.Second
-	resp, err := s.forwardToAgentWithTimeout(agentID, protocol.TypeExec, params, timeout)
+	resp, err := s.forwardToAgentWithTimeout(agentID, protocol.TypeExec, params, timeout, operatorIDFromRequest(r))
 	if err != nil {
 		// Check if it was a timeout
 		if strings.Contains(err.Error(), "timed out") {
@@ -401,20 +421,26 @@ func (s *Server) handleAgentProcStart(w http.ResponseWriter, r *http.Request, ag
 
 // forwardToAgent sends a command to the agent via WebSocket and waits for response.
 // This is the generic request-response pattern used by all forwarded handlers.
-// Uses a default 120-second timeout.
+// Uses a default 120-second timeout. The operatorID is used for audit logging
+// (empty string for server-initiated commands).
 func (s *Server) forwardToAgent(agentID string, msgType string, params interface{}) (interface{}, error) {
-	return s.forwardToAgentWithTimeout(agentID, msgType, params, 120*time.Second)
+	return s.forwardToAgentWithTimeout(agentID, msgType, params, 120*time.Second, "")
 }
 
 // forwardToAgentWithTimeout sends a command to the agent via WebSocket and waits
 // for response with a custom timeout. This is the core request-response method —
-// forwardToAgent is a convenience wrapper with a 120s default.
-func (s *Server) forwardToAgentWithTimeout(agentID string, msgType string, params interface{}, timeout time.Duration) (interface{}, error) {
+// forwardToAgent is a convenience wrapper with a 120s default. Every forwarded
+// command is logged to the audit logger with the operator, action, and result.
+// operatorID is the authenticated operator's ID (empty for server-initiated
+// commands such as tunnel setup or disconnect-time process kills).
+func (s *Server) forwardToAgentWithTimeout(agentID string, msgType string, params interface{}, timeout time.Duration, operatorID string) (interface{}, error) {
+	start := time.Now()
 	s.mu.RLock()
 	conn, ok := s.conns[agentID]
 	writeMu, wmuOk := s.connWriteMu[agentID]
 	s.mu.RUnlock()
 	if !ok || !wmuOk {
+		s.auditLog(agentID, msgType, params, "error", "agent not connected", start, false, operatorID)
 		return nil, fmt.Errorf("agent %s not connected", agentID)
 	}
 
@@ -451,12 +477,14 @@ func (s *Server) forwardToAgentWithTimeout(agentID string, msgType string, param
 	err := conn.WriteJSON(env)
 	writeMu.Unlock()
 	if err != nil {
+		s.auditLog(agentID, msgType, params, "error", "send to agent failed: "+err.Error(), start, false, operatorID)
 		return nil, fmt.Errorf("send to agent failed: %w", err)
 	}
 
 	select {
 	case resp := <-respCh:
 		if resp.Error != nil {
+			s.auditLog(agentID, msgType, params, "success", "", start, false, operatorID)
 			return map[string]interface{}{
 				"error": resp.Error.Message,
 			}, nil
@@ -465,10 +493,30 @@ func (s *Server) forwardToAgentWithTimeout(agentID string, msgType string, param
 		if resp.Result != nil {
 			json.Unmarshal(resp.Result, &result)
 		}
+		s.auditLog(agentID, msgType, params, "success", "", start, false, operatorID)
 		return result, nil
 	case <-time.After(timeout):
+		s.auditLog(agentID, msgType, params, "error", "timed out", start, false, operatorID)
 		return nil, fmt.Errorf("agent did not respond within %v (timed out)", timeout)
 	}
+}
+
+// auditLog writes a single audit entry for a forwarded command. operatorID
+// is the authenticated operator (empty for server-initiated actions).
+func (s *Server) auditLog(agentID, action string, params interface{}, result, errMsg string, start time.Time, bypass bool, operatorID string) {
+	if s.audit == nil {
+		return
+	}
+	s.audit.Log(AuditEntry{
+		AgentID:    agentID,
+		OperatorID: operatorID,
+		Action:     action,
+		Params:     params,
+		Result:     result,
+		ErrorMsg:   errMsg,
+		DurationMs: time.Since(start).Milliseconds(),
+		Bypass:     bypass,
+	})
 }
 
 
@@ -481,5 +529,40 @@ func (s *Server) handleAgentHealth(w http.ResponseWriter, r *http.Request, agent
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(rec)
+}
+
+// actionToRBAC maps an HTTP route action (e.g. "exec", "fs-read") to the
+// RBAC action name used by Operator.CanPerform. The mapping is 1:1 for
+// most actions; "health" maps to "health" (viewer-allowed).
+func actionToRBAC(action string) string {
+	switch action {
+	case "exec", "fs-read", "fs-write", "fs-stat", "fs-hash", "capture",
+		"task-list", "proc-list", "proc-kill", "proc-start",
+		"tunnel", "tunnel-close", "sniff", "sniff-stop",
+		"mitm-start", "mitm-stop", "mitm-traffic",
+		"debug-attach", "debug-detach", "debug-read-mem", "debug-modules", "debug-mem-query",
+		"update", "health":
+		return action
+	default:
+		return action
+	}
+}
+
+// auditDenied logs a "denied" audit entry when an operator is rejected by RBAC.
+func (s *Server) auditDenied(agentID, action string, op *Operator) {
+	if s.audit == nil {
+		return
+	}
+	entry := AuditEntry{
+		AgentID:   agentID,
+		Action:    action,
+		Result:    "denied",
+		ErrorMsg:  "permission denied",
+		Timestamp: time.Now().UTC(),
+	}
+	if op != nil {
+		entry.OperatorID = op.ID
+	}
+	s.audit.Log(entry)
 }
 

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -74,6 +75,12 @@ type Server struct {
 	// Configurable reverse proxies (path prefix → target URL)
 	proxyMu sync.RWMutex
 	proxies map[string]*ProxyEntry
+
+	// RBAC: operator management (nil or empty → fall back to legacy token auth).
+	operators *OperatorManager
+
+	// Audit logging: persists every forwarded command as a JSONL entry.
+	audit *AuditLogger
 }
 
 // startTime records when the server process began, used by /health for uptime.
@@ -98,6 +105,8 @@ func NewServer(addr string, token string, registryPath string) *Server {
 		rotatedTokens: make(map[string]string),
 		tokenStop:     make(chan struct{}),
 		proxies:       make(map[string]*ProxyEntry),
+		operators:     NewOperatorManager(""),
+		audit:         NewAuditLogger(""),
 	}
 }
 
@@ -246,5 +255,91 @@ func (s *Server) Close() error {
 		return s.srv.Close()
 	}
 	return nil
+}
+
+// SetOperatorPath configures persistent operator storage. When set,
+// operators are loaded from / persisted to the given file path. Must be
+// called before Start/StartTLS.
+func (s *Server) SetOperatorPath(path string) {
+	s.operators = NewOperatorManager(path)
+}
+
+// SetAuditPath configures persistent audit logging. When set, every
+// forwarded command is appended to the given JSONL file. Must be called
+// before Start/StartTLS.
+func (s *Server) SetAuditPath(path string) {
+	s.audit = NewAuditLogger(path)
+}
+
+// operatorContextKey is the context key used to store the authenticated
+// operator in the request context.
+type operatorContextKey struct{}
+
+// operatorFromContext extracts the operator from the request context, or
+// returns nil if no operator was set.
+func operatorFromContext(r *http.Request) *Operator {
+	if v := r.Context().Value(operatorContextKey{}); v != nil {
+		if op, ok := v.(*Operator); ok {
+			return op
+		}
+	}
+	return nil
+}
+
+// operatorIDFromRequest is a convenience wrapper that returns the operator ID
+// from the request context, or "" if no operator was set.
+func operatorIDFromRequest(r *http.Request) string {
+	if op := operatorFromContext(r); op != nil {
+		return op.ID
+	}
+	return ""
+}
+
+// checkOperatorAuth extracts the bearer token from the Authorization header,
+// looks up the operator by token, and checks whether the operator's role
+// permits the requested action. When no operators are configured (IsEmpty),
+// it falls back to the legacy token-based auth (checkAPIAuth). Returns the
+// operator and true on success, or nil and false on failure.
+func (s *Server) checkOperatorAuth(r *http.Request, action string) (*Operator, bool) {
+	// Fall back to legacy token auth when no operators are configured.
+	if s.operators == nil || s.operators.IsEmpty() {
+		if s.isValidToken(r.Header.Get("Authorization")) {
+			return nil, true
+		}
+		if !s.requireAPIAuth {
+			return nil, true // auth optional, allow through
+		}
+		return nil, false
+	}
+
+	// RBAC mode: extract bearer token.
+	authHeader := r.Header.Get("Authorization")
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	if token == authHeader || token == "" {
+		if !s.requireAPIAuth {
+			return nil, true // auth optional
+		}
+		log.Printf("[server] missing bearer token from %s: %s", r.RemoteAddr, r.URL.Path)
+		return nil, false
+	}
+
+	op := s.operators.GetByToken(token)
+	if op == nil {
+		if !s.requireAPIAuth {
+			return nil, true // auth optional
+		}
+		log.Printf("[server] unknown operator token from %s: %s", r.RemoteAddr, r.URL.Path)
+		return nil, false
+	}
+
+	if !op.CanPerform(action) {
+		log.Printf("[server] operator %s (role %s) denied action %q on %s",
+			op.ID, op.Role, action, r.URL.Path)
+		return op, false
+	}
+
+	// Update last-seen timestamp.
+	s.operators.UpdateLastSeen(op.ID, time.Now().UTC())
+	return op, true
 }
 
