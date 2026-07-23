@@ -97,6 +97,11 @@ type Server struct {
 
 	// Task scheduler: delayed, recurring, and offline-queued tasks.
 	tasks *TaskManager
+
+	// uiWrapper wraps the mux with an embedded-frontend handler for serving
+	// the React WebUI. When nil (frontend not built), Start/StartTLS uses
+	// the mux directly.
+	uiWrapper http.Handler
 }
 
 // startTime records when the server process began, used by /health for uptime.
@@ -195,17 +200,26 @@ func (s *Server) registerRoutes() {
 
 	// OpenAPI 3.0 specification endpoint.
 	s.mux.HandleFunc("GET /openapi.json", s.handleOpenAPI)
+
+	// Embedded React WebUI — SPA fallback for non-API routes.
+	s.registerUI()
 }
 
 // Start begins listening for WebSocket and HTTP connections.
 func (s *Server) Start() error {
 	s.mux = http.NewServeMux()
-	s.srv = &http.Server{
-		Addr:    s.addr,
-		Handler: s.mux,
+	s.registerRoutes()
+
+	// Wrap mux with UI handler if the frontend was embedded.
+	handler := http.Handler(s.mux)
+	if s.uiWrapper != nil {
+		handler = s.uiWrapper
 	}
 
-	s.registerRoutes()
+	s.srv = &http.Server{
+		Addr:    s.addr,
+		Handler: handler,
+	}
 
 	// Start proactive token rotation if a TTL was configured.
 	s.StartTokenRotation()
@@ -248,13 +262,19 @@ func (s *Server) StartTLS(certFile, keyFile string) error {
 		tlsConfig.ClientCAs = caCertPool
 	}
 
-	s.srv = &http.Server{
-		Addr:      s.addr,
-		Handler:   s.mux,
-		TLSConfig: tlsConfig,
+	s.registerRoutes()
+
+	// Wrap mux with UI handler if the frontend was embedded.
+	handler := http.Handler(s.mux)
+	if s.uiWrapper != nil {
+		handler = s.uiWrapper
 	}
 
-	s.registerRoutes()
+	s.srv = &http.Server{
+		Addr:      s.addr,
+		Handler:   handler,
+		TLSConfig: tlsConfig,
+	}
 
 	// Start proactive token rotation if a TTL is configured.
 	s.StartTokenRotation()

@@ -8,3 +8,6 @@ cmd/probe-server/probe-server
 .venv/
 __pycache__/
 *.pyc
+web/node_modules/
+web/dist/
+!web/dist/.gitkeep
