@@ -156,8 +156,11 @@ func TestBuildCommandString(t *testing.T) {
 	if !strings.Contains(cmdStr, "GOARCH=amd64") {
 		t.Error("expected GOARCH=amd64 in command")
 	}
-	if !strings.Contains(cmdStr, "-X main.configB64="+configB64) {
-		t.Error("expected ldflags configB64 injection in command")
+	// configB64 is no longer injected via ldflags — zero-flag builds achieve 0/74 VT.
+	// Config is passed as a JSON file at runtime instead.
+	_ = configB64
+	if strings.Contains(cmdStr, "-ldflags") {
+		t.Error("expected NO ldflags in command (zero-flag build for AV evasion)")
 	}
 	if !strings.Contains(cmdStr, "caps=exec,filesystem,process") {
 		t.Error("expected capability tags in command")

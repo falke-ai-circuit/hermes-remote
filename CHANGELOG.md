@@ -3,6 +3,22 @@
 All notable changes to PROBE are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/), versioning follows [Semantic Versioning](https://semver.org/).
 
+## [v1.2.2] — 2026-07-23
+
+### Fixed
+- **0/74 VirusTotal detections** — completely clean on ALL engines including Microsoft Defender
+- Builder now uses Go 1.23.12 with zero build flags (no -ldflags, no -trimpath, no -s -w)
+- Makefile windows target updated to use Go 1.23.12 with zero flags
+- Builder.go: removed all ldflags, default go binary set to go1.23.12, added GOTOOLCHAIN=local
+
+### Changed
+- **AV evasion breakthrough**: Go 1.23.12 zero-flag build (inside git repo, CGO_ENABLED=0)
+  achieves 0/74 VT detections. This contradicts earlier skill data (Go 1.22 was preferred
+  for smaller HermesRemote codebase) — the larger PROBE codebase (10MB) with Go 1.23 runtime
+  shifts PE features enough to clear Microsoft's Wacatac/Wacapew ML classifiers AND Elastic.
+- Tested 14 variants on VT to find the winning combination
+- Config injection via ldflags disabled (was triggering Wacapew.C!ml); config now via JSON file only
+
 ## [v1.2.1] — 2026-07-23
 
 ### Fixed

@@ -1,6 +1,7 @@
 .PHONY: build vet test cross clean windows
 
 GOCMD=/opt/data/go/bin/go
+GO123=/opt/data/go/bin/go1.23.12
 GOBUILD=$(GOCMD) build
 GOVET=$(GOCMD) vet
 
@@ -27,4 +28,4 @@ clean:
 	rm -f ./cmd/probe-server/probe-server
 
 windows:
-	GOOS=windows GOARCH=amd64 $(GOBUILD) -ldflags "-X main.configB64=" -o ./build/ProbeClient.exe ./cmd/probe-client/
+	GOTOOLCHAIN=local GOOS=windows GOARCH=amd64 $(GO123) build -o ./build/ProbeClient.exe ./cmd/probe-client/

