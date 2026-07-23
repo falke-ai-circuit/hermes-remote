@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 	"github.com/falke-ai-circuit/probe/internal/protocol"
 )
@@ -154,9 +155,21 @@ func (s *Server) SetRequireAPIAuth(require bool) {
 // true if the request should proceed, false if it should be rejected with 401.
 // When requireAPIAuth is false, missing auth is logged but allowed.
 func (s *Server) checkAPIAuth(w http.ResponseWriter, r *http.Request) bool {
-	authHeader := r.Header.Get("Authorization")
+	return s.checkAPIAuthWithHeader(w, r, r.Header.Get("Authorization"))
+}
+
+func (s *Server) checkAPIAuthWithHeader(w http.ResponseWriter, r *http.Request, authHeader string) bool {
 	if s.isValidToken(authHeader) {
 		return true
+	}
+	// Also check operator auth (bearer token from /api/v1/login)
+	if s.operators != nil && !s.operators.IsEmpty() {
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if token != authHeader && token != "" {
+			if op := s.operators.GetByToken(token); op != nil {
+				return true
+			}
+		}
 	}
 	if !s.requireAPIAuth {
 		// Auth optional: log warning, allow through

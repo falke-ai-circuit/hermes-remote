@@ -80,7 +80,7 @@ func (s *Server) handleAgentUpdate(w http.ResponseWriter, r *http.Request, agent
 			host = "localhost" + host
 		}
 	}
-	downloadURL := fmt.Sprintf("http://%s/download/%s", host, filename)
+	downloadURL := fmt.Sprintf("http://%s/download/%s?token=%s", host, filename, s.token)
 
 	// Send agent_update to the agent
 	updateParams := protocol.AgentUpdateParams{

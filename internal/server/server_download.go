@@ -18,7 +18,15 @@ import (
 //   - /api/agent/{id}/download/{filename}
 //   - POST /api/agent/{id}/file-download (body: {"filename":"..."})
 func (s *Server) handleFileDownload(w http.ResponseWriter, r *http.Request) {
-	if !s.checkAPIAuth(w, r) {
+	// Check auth: try header first, then query parameter (for agent downloads)
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		// Allow token via query param for agent-initiated downloads
+		if qToken := r.URL.Query().Get("token"); qToken != "" {
+			authHeader = "Bearer " + qToken
+		}
+	}
+	if !s.checkAPIAuthWithHeader(w, r, authHeader) {
 		return
 	}
 
