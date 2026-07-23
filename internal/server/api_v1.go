@@ -284,6 +284,28 @@ func (s *Server) registerV1Routes() {
 	s.mux.HandleFunc("POST /api/v1/agents/{id}/update",
 		s.v1WrapAgentHandler("update", s.handleAgentUpdate))
 
+	// Phase 7: New capability endpoints (all POST)
+	s.mux.HandleFunc("POST /api/v1/agents/{id}/socks5-start",
+		s.v1Forward("socks5-start", protocol.TypeSocks5Start, true))
+	s.mux.HandleFunc("POST /api/v1/agents/{id}/socks5-stop",
+		s.v1Forward("socks5-stop", protocol.TypeSocks5Stop, true))
+	s.mux.HandleFunc("POST /api/v1/agents/{id}/port-forward",
+		s.v1Forward("port-forward", protocol.TypePortForward, true))
+	s.mux.HandleFunc("POST /api/v1/agents/{id}/port-scan",
+		s.v1Forward("port-scan", protocol.TypePortScan, true))
+	s.mux.HandleFunc("POST /api/v1/agents/{id}/net-connections",
+		s.v1Forward("net-connections", protocol.TypeNetConnections, false))
+	s.mux.HandleFunc("POST /api/v1/agents/{id}/autostart-enable",
+		s.v1Forward("autostart-enable", protocol.TypeAutostartEnable, true))
+	s.mux.HandleFunc("POST /api/v1/agents/{id}/autostart-disable",
+		s.v1Forward("autostart-disable", protocol.TypeAutostartDisable, true))
+	s.mux.HandleFunc("POST /api/v1/agents/{id}/autostart-status",
+		s.v1Forward("autostart-status", protocol.TypeAutostartStatus, false))
+	s.mux.HandleFunc("POST /api/v1/agents/{id}/file-search",
+		s.v1Forward("file-search", protocol.TypeFileSearch, true))
+	s.mux.HandleFunc("POST /api/v1/agents/{id}/sysinfo",
+		s.v1Forward("sysinfo", protocol.TypeSysInfo, false))
+
 	// Enrollment + revocation (Phase 3)
 	s.mux.HandleFunc("POST /api/v1/enroll", s.handleV1Enroll)
 	s.mux.HandleFunc("POST /api/v1/enrollment-tokens", s.handleV1CreateEnrollmentToken)

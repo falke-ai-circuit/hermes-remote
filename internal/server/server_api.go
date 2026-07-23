@@ -111,6 +111,27 @@ func (s *Server) handleAgentRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentUpdate(w, r, agentID)
 	case action == "health" && r.Method == http.MethodGet:
 		s.handleAgentHealth(w, r, agentID)
+	// Phase 7: New capability endpoints (forward to agent via v1Forward pattern)
+	case action == "socks5-start" && r.Method == http.MethodPost:
+		s.handleAgentGenericForward(w, r, agentID, protocol.TypeSocks5Start)
+	case action == "socks5-stop" && r.Method == http.MethodPost:
+		s.handleAgentGenericForward(w, r, agentID, protocol.TypeSocks5Stop)
+	case action == "port-forward" && r.Method == http.MethodPost:
+		s.handleAgentGenericForward(w, r, agentID, protocol.TypePortForward)
+	case action == "port-scan" && r.Method == http.MethodPost:
+		s.handleAgentGenericForward(w, r, agentID, protocol.TypePortScan)
+	case action == "net-connections" && r.Method == http.MethodPost:
+		s.handleAgentGenericForward(w, r, agentID, protocol.TypeNetConnections)
+	case action == "autostart-enable" && r.Method == http.MethodPost:
+		s.handleAgentGenericForward(w, r, agentID, protocol.TypeAutostartEnable)
+	case action == "autostart-disable" && r.Method == http.MethodPost:
+		s.handleAgentGenericForward(w, r, agentID, protocol.TypeAutostartDisable)
+	case action == "autostart-status" && r.Method == http.MethodPost:
+		s.handleAgentGenericForward(w, r, agentID, protocol.TypeAutostartStatus)
+	case action == "file-search" && r.Method == http.MethodPost:
+		s.handleAgentGenericForward(w, r, agentID, protocol.TypeFileSearch)
+	case action == "sysinfo" && r.Method == http.MethodPost:
+		s.handleAgentGenericForward(w, r, agentID, protocol.TypeSysInfo)
 	default:
 		http.Error(w, "not found", http.StatusNotFound)
 	}
@@ -551,7 +572,13 @@ func actionToRBAC(action string) string {
 		"tunnel", "tunnel-close", "sniff", "sniff-stop",
 		"mitm-start", "mitm-stop", "mitm-traffic",
 		"debug-attach", "debug-detach", "debug-read-mem", "debug-modules", "debug-mem-query",
-		"update", "health":
+		"update", "health",
+		// Phase 7: new capability actions
+		"socks5-start", "socks5-stop",
+		"port-forward", "port-scan",
+		"net-connections",
+		"autostart-enable", "autostart-disable", "autostart-status",
+		"file-search", "sysinfo":
 		return action
 	default:
 		return action
@@ -574,5 +601,28 @@ func (s *Server) auditDenied(agentID, action string, op *Operator) {
 		entry.OperatorID = op.ID
 	}
 	s.audit.Log(entry)
+}
+
+// handleAgentGenericForward is a generic handler that reads the request body
+// (if present) and forwards a command to the agent. Used by Phase 7 new
+// capabilities that don't need custom server-side logic.
+func (s *Server) handleAgentGenericForward(w http.ResponseWriter, r *http.Request, agentID string, msgType string) {
+	var params interface{}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+	if len(body) > 0 {
+		params = json.RawMessage(body)
+	}
+	resp, err := s.forwardToAgent(agentID, msgType, params)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
 

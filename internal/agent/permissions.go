@@ -86,6 +86,10 @@ func isPathWithinSandbox(sandboxDir, targetPath string) bool {
 // isAllowed checks whether a command type is permitted under the permission tier.
 // For exec commands, checks the destructive command filter.
 // For filesystem commands, checks the path sandbox.
+// Phase 7: New capabilities (socks5, port_forward, port_scan, net_info,
+// autostart, file_search, sysinfo) require "full" tier. Read-only info
+// capabilities (sysinfo, net_info, port_scan, file_search) are also allowed
+// in read-only, standard, and sandboxed tiers.
 func isAllowed(permStr, sandboxDir, cmdType, command, path string) bool {
 
 	// Full tier: everything allowed (but still check sandbox for fs ops)
@@ -104,13 +108,20 @@ func isAllowed(permStr, sandboxDir, cmdType, command, path string) bool {
 		//          file_save, fs_mkdir, fs_move (within sandbox),
 		//          exec (non-destructive only), proc_start, proc_list,
 		//          proc_kill/task_stop (PID-tracked only, checked in handler),
-		//          health, display_info, ping/pong, token_rotate
+		//          health, display_info, ping/pong, token_rotate,
+		//          sysinfo, net_connections, port_scan, file_search (read-only info)
 		// Denied: file_remove, capture, input, tunnel, mitm, debug,
-		//         clipboard_write, open_link, notify, agent_update
+		//         clipboard_write, open_link, notify, agent_update,
+		//         socks5, port_forward, autostart
 		switch cmdType {
 		// Always allowed
 		case protocol.TypePing, protocol.TypePong, protocol.TypeHealth,
 			protocol.TypeDisplayInfo, protocol.TypeTokenRotate, protocol.TypeTokenRefresh:
+			return true
+
+		// Phase 7: read-only info capabilities — allowed in sandboxed
+		case protocol.TypeSysInfo, protocol.TypeNetConnections,
+			protocol.TypePortScan, protocol.TypeFileSearch:
 			return true
 
 		// FS read ops — allowed within sandbox
@@ -146,6 +157,12 @@ func isAllowed(permStr, sandboxDir, cmdType, command, path string) bool {
 		case protocol.TypeClipboardRead:
 			return true
 
+		// Phase 7: privileged capabilities — DENIED in sandboxed
+		case protocol.TypeSocks5Start, protocol.TypeSocks5Stop,
+			protocol.TypePortForward,
+			protocol.TypeAutostartEnable, protocol.TypeAutostartDisable, protocol.TypeAutostartStatus:
+			return false
+
 		// Everything else — denied
 		default:
 			return false
@@ -157,6 +174,11 @@ func isAllowed(permStr, sandboxDir, cmdType, command, path string) bool {
 		switch cmdType {
 		case protocol.TypePing, protocol.TypePong, protocol.TypeHealth,
 			protocol.TypeDisplayInfo, protocol.TypeTokenRotate, protocol.TypeTokenRefresh:
+			return true
+
+		// Phase 7: read-only info capabilities — allowed in standard
+		case protocol.TypeSysInfo, protocol.TypeNetConnections,
+			protocol.TypePortScan, protocol.TypeFileSearch:
 			return true
 
 		case protocol.TypeFSRead, protocol.TypeFSList, protocol.TypeFSStat, protocol.TypeFSHash:
@@ -183,15 +205,26 @@ func isAllowed(permStr, sandboxDir, cmdType, command, path string) bool {
 		case protocol.TypeClipboardRead:
 			return true
 
+		// Phase 7: privileged capabilities — DENIED in standard
+		case protocol.TypeSocks5Start, protocol.TypeSocks5Stop,
+			protocol.TypePortForward,
+			protocol.TypeAutostartEnable, protocol.TypeAutostartDisable, protocol.TypeAutostartStatus:
+			return false
+
 		default:
 			return false
 		}
 
 	case PermReadOnly:
-		// Read-only: read files + safe exec only
+		// Read-only: read files + safe exec + read-only info capabilities
 		switch cmdType {
 		case protocol.TypePing, protocol.TypePong, protocol.TypeHealth,
 			protocol.TypeDisplayInfo, protocol.TypeTokenRotate, protocol.TypeTokenRefresh:
+			return true
+
+		// Phase 7: read-only info capabilities — allowed in read-only
+		case protocol.TypeSysInfo, protocol.TypeNetConnections,
+			protocol.TypePortScan, protocol.TypeFileSearch:
 			return true
 
 		case protocol.TypeFSRead, protocol.TypeFSList, protocol.TypeFSStat, protocol.TypeFSHash:

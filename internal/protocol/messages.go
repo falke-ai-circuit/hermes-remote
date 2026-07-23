@@ -85,6 +85,39 @@ const (
 	TypeAgentUpdate     = "agent_update"      // Server tells agent to download + start new binary
 	TypeAgentUpdateResult = "agent_update_result" // Agent confirms: new process started, old PID reported
 
+	// --- Phase 7: New capabilities ---
+
+	// SOCKS5 Proxy (Server → Agent)
+	TypeSocks5Start  = "socks5_start"
+	TypeSocks5Stop   = "socks5_stop"
+	TypeSocks5Result = "socks5_result"
+
+	// Port Forwarding (Server → Agent)
+	TypePortForward       = "port_forward"
+	TypePortForwardResult = "port_forward_result"
+
+	// Port Scanning (Server → Agent)
+	TypePortScan       = "port_scan"
+	TypePortScanResult = "port_scan_result"
+
+	// Net Connections (Server → Agent)
+	TypeNetConnections       = "net_connections"
+	TypeNetConnectionsResult = "net_connections_result"
+
+	// Autostart (Server → Agent)
+	TypeAutostartEnable  = "autostart_enable"
+	TypeAutostartDisable = "autostart_disable"
+	TypeAutostartStatus  = "autostart_status"
+	TypeAutostartResult  = "autostart_result"
+
+	// File Search (Server → Agent)
+	TypeFileSearch       = "file_search"
+	TypeFileSearchResult = "file_search_result"
+
+	// System Info (Server → Agent)
+	TypeSysInfo       = "sysinfo"
+	TypeSysInfoResult = "sysinfo_result"
+
 	// Results (Agent → Server)
 	TypeExecResult          = "exec_result"
 	TypeFSListResult       = "fs_list_result"
@@ -516,6 +549,136 @@ type AgentUpdateResult struct {
 	OldPID   int    `json:"old_pid"`
 	NewPID   int    `json:"new_pid"`
 	Message  string `json:"message,omitempty"`
+}
+
+// --- Phase 7: New capability params/results ---
+
+// Socks5StartParams starts a SOCKS5 proxy on the agent.
+type Socks5StartParams struct {
+	ListenAddr string `json:"listen_addr"`           // e.g. "127.0.0.1:1080"
+	TargetHost string `json:"target_host,omitempty"`  // optional: fixed target (proxy mode if empty)
+}
+
+type Socks5StartResult struct {
+	Socks5ID   string `json:"socks5_id"`
+	ListenAddr string `json:"listen_addr"`
+}
+
+type Socks5StopParams struct {
+	Socks5ID string `json:"socks5_id"`
+}
+
+// PortForwardParams configures a port forward.
+type PortForwardParams struct {
+	LocalPort  int    `json:"local_port"`
+	RemoteHost string `json:"remote_host"`
+	RemotePort int    `json:"remote_port"`
+	Direction  string `json:"direction"` // "forward" or "reverse"
+}
+
+type PortForwardResult struct {
+	ForwardID  string `json:"forward_id"`
+	LocalPort  int    `json:"local_port"`
+	RemoteHost string `json:"remote_host"`
+	RemotePort int    `json:"remote_port"`
+	Direction  string `json:"direction"`
+}
+
+// PortScanParams specifies a port scan request.
+type PortScanParams struct {
+	Host    string `json:"host"`
+	Ports   []int  `json:"ports"`
+	Timeout int    `json:"timeout,omitempty"` // milliseconds per port, default 1000
+}
+
+// PortScanEntry represents the result of scanning one port.
+type PortScanEntry struct {
+	Port   int    `json:"port"`
+	State  string `json:"state"`  // "open", "closed", "filtered"
+	Banner string `json:"banner,omitempty"` // optional service banner
+}
+
+type PortScanResult struct {
+	Host   string          `json:"host"`
+	Open   []int           `json:"open"`
+	Results []PortScanEntry `json:"results"`
+}
+
+// NetConnectionEntry represents a single network connection.
+type NetConnectionEntry struct {
+	Protocol      string `json:"protocol"`       // "tcp" or "udp"
+	LocalAddress  string `json:"local_address"`
+	LocalPort     int    `json:"local_port"`
+	RemoteAddress string `json:"remote_address"`
+	RemotePort    int    `json:"remote_port"`
+	State         string `json:"state"`          // e.g. "ESTABLISHED", "LISTEN", ""
+	PID           int    `json:"pid,omitempty"`
+}
+
+type NetConnectionsResult struct {
+	Connections []NetConnectionEntry `json:"connections"`
+}
+
+// AutostartParams configures an autostart registration.
+type AutostartParams struct {
+	Method       string `json:"method"`        // "registry", "scheduled_task", "launchd", "systemd"
+	CommandPath  string `json:"command_path"`  // path to the executable
+	Name         string `json:"name"`          // name for the autostart entry
+}
+
+type AutostartResult struct {
+	Enabled  bool   `json:"enabled"`
+	Method   string `json:"method,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Message  string `json:"message,omitempty"`
+}
+
+// FileSearchParams specifies a file search request.
+type FileSearchParams struct {
+	RootPath   string `json:"root_path"`
+	Pattern    string `json:"pattern"`     // glob pattern, e.g. "*.log"
+	MaxResults int    `json:"max_results,omitempty"` // 0 = unlimited
+}
+
+type FileSearchResult struct {
+	RootPath string   `json:"root_path"`
+	Pattern  string   `json:"pattern"`
+	Matches  []string `json:"matches"`
+	Count    int      `json:"count"`
+}
+
+// SysInfoResult contains detailed system information.
+type SysInfoResult struct {
+	Hostname        string           `json:"hostname"`
+	OS              string           `json:"os"`
+	Arch            string           `json:"arch"`
+	NumCPU          int              `json:"num_cpu"`
+	GoVersion       string           `json:"go_version"`
+	Memory          SysMemInfo       `json:"memory"`
+	Disk            []SysDiskInfo    `json:"disk"`
+	Network         []SysNetInfo     `json:"network"`
+	UptimeSeconds   int64            `json:"uptime_seconds"`
+	BootTime        string           `json:"boot_time,omitempty"`
+}
+
+type SysMemInfo struct {
+	TotalBytes uint64 `json:"total_bytes"`
+	FreeBytes  uint64 `json:"free_bytes"`
+	UsedBytes  uint64 `json:"used_bytes"`
+}
+
+type SysDiskInfo struct {
+	Path        string `json:"path"`
+	TotalBytes  uint64 `json:"total_bytes"`
+	FreeBytes   uint64 `json:"free_bytes"`
+	UsedBytes   uint64 `json:"used_bytes"`
+}
+
+type SysNetInfo struct {
+	Name        string   `json:"name"`
+	IPAddresses []string `json:"ip_addresses"`
+	MAC         string   `json:"mac,omitempty"`
+	Up          bool     `json:"up"`
 }
 
 // NewError creates an error envelope.

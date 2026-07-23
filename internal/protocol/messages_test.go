@@ -334,6 +334,14 @@ func TestAllMessageTypes_MarshalUnmarshal(t *testing.T) {
 		TypeAgentUpdate, TypeAgentUpdateResult,
 		TypeStreamBegin, TypeStreamEnd,
 		TypeStreamBeginResult, TypeStreamEndResult,
+		// Phase 7 new types
+		TypeSocks5Start, TypeSocks5Stop, TypeSocks5Result,
+		TypePortForward, TypePortForwardResult,
+		TypePortScan, TypePortScanResult,
+		TypeNetConnections, TypeNetConnectionsResult,
+		TypeAutostartEnable, TypeAutostartDisable, TypeAutostartStatus, TypeAutostartResult,
+		TypeFileSearch, TypeFileSearchResult,
+		TypeSysInfo, TypeSysInfoResult,
 		TypeError,
 	}
 

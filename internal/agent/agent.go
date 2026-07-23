@@ -442,6 +442,27 @@ func (a *Agent) handleCommand(conn *websocket.Conn, env protocol.Envelope) {
 		resp = a.handleDebugMemQuery(env)
 	case protocol.TypeAgentUpdate:
 		resp = a.handleAgentUpdate(env)
+	// Phase 7: New capabilities
+	case protocol.TypeSocks5Start:
+		resp = a.handleSocks5Start(env)
+	case protocol.TypeSocks5Stop:
+		resp = a.handleSocks5Stop(env)
+	case protocol.TypePortForward:
+		resp = a.handlePortForward(env)
+	case protocol.TypePortScan:
+		resp = a.handlePortScan(env)
+	case protocol.TypeNetConnections:
+		resp = a.handleNetConnections(env)
+	case protocol.TypeAutostartEnable:
+		resp = a.handleAutostartEnable(env)
+	case protocol.TypeAutostartDisable:
+		resp = a.handleAutostartDisable(env)
+	case protocol.TypeAutostartStatus:
+		resp = a.handleAutostartStatus(env)
+	case protocol.TypeFileSearch:
+		resp = a.handleFileSearch(env)
+	case protocol.TypeSysInfo:
+		resp = a.handleSysInfo(env)
 	default:
 		resp = protocol.NewError(env.ID, protocol.ErrInvalidParams, fmt.Sprintf("unknown command: %s", env.Type))
 	}

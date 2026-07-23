@@ -19,12 +19,17 @@ const (
 
 // viewerActions is the set of actions a viewer-role operator may perform.
 var viewerActions = map[string]bool{
-	"list":     true,
-	"health":   true,
-	"fs-list":  true,
-	"fs-stat":  true,
-	"fs-read":  true,
-	"fs-hash":  true,
+	"list":             true,
+	"health":          true,
+	"fs-list":         true,
+	"fs-stat":         true,
+	"fs-read":         true,
+	"fs-hash":         true,
+	// Phase 7: read-only info capabilities
+	"sysinfo":         true,
+	"net-connections": true,
+	"port-scan":       true,
+	"file-search":     true,
 }
 
 // Operator represents an authenticated API user with a role-based permission

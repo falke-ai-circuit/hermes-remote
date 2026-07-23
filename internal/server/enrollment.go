@@ -467,6 +467,35 @@ func capabilityForCommand(msgType string) string {
 	case protocol.TypeSniffStart, protocol.TypeSniffStop:
 		return "sniff"
 
+	// Phase 7: New capabilities
+	// SOCKS5 proxy
+	case protocol.TypeSocks5Start, protocol.TypeSocks5Stop:
+		return "socks5"
+
+	// Port forwarding
+	case protocol.TypePortForward:
+		return "port_forward"
+
+	// Port scanning
+	case protocol.TypePortScan:
+		return "port_scan"
+
+	// Net connections
+	case protocol.TypeNetConnections:
+		return "net_info"
+
+	// Autostart
+	case protocol.TypeAutostartEnable, protocol.TypeAutostartDisable, protocol.TypeAutostartStatus:
+		return "autostart"
+
+	// File search
+	case protocol.TypeFileSearch:
+		return "file_search"
+
+	// System info
+	case protocol.TypeSysInfo:
+		return "sysinfo"
+
 	// Control messages — no capability required
 	case protocol.TypePing, protocol.TypePong,
 		protocol.TypeHealth,
