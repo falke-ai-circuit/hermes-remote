@@ -8,6 +8,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Role constants for operator permissions.
@@ -36,12 +38,33 @@ var viewerActions = map[string]bool{
 // level. The Token field is never serialized to JSON (json:"-") so it cannot
 // leak through any API response.
 type Operator struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Role      string    `json:"role"` // "admin", "operator", "viewer"
-	Token     string    `json:"-"`    // API token (not serialized)
-	CreatedAt time.Time `json:"created_at"`
-	LastSeen  time.Time `json:"last_seen,omitempty"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Role         string    `json:"role"` // "admin", "operator", "viewer"
+	Token        string    `json:"-"`    // API token (not serialized)
+	PasswordHash string    `json:"-"`    // bcrypt hash, not serialized
+	CreatedAt    time.Time `json:"created_at"`
+	LastSeen     time.Time `json:"last_seen,omitempty"`
+}
+
+// SetPassword sets the operator's password by bcrypt-hashing the given
+// plaintext password.
+func (o *Operator) SetPassword(password string) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+	o.PasswordHash = string(hash)
+	return nil
+}
+
+// CheckPassword returns true when the given plaintext password matches the
+// stored bcrypt hash.
+func (o *Operator) CheckPassword(password string) bool {
+	if o.PasswordHash == "" {
+		return false
+	}
+	return bcrypt.CompareHashAndPassword([]byte(o.PasswordHash), []byte(password)) == nil
 }
 
 // CanPerform returns true when the operator's role permits the given action.
@@ -107,6 +130,56 @@ func (om *OperatorManager) Create(name, role, token string) (*Operator, error) {
 	om.byToken[token] = id
 	om.save()
 	return op, nil
+}
+
+// CreateWithPassword adds a new operator with the given name, role, password,
+// and token. If token is empty a random one is generated. Returns the created
+// operator or an error if the role is invalid. The password is bcrypt-hashed
+// and stored in PasswordHash.
+func (om *OperatorManager) CreateWithPassword(name, role, password, token string) (*Operator, error) {
+	if !isValidRole(role) {
+		return nil, fmt.Errorf("invalid role %q: must be admin, operator, or viewer", role)
+	}
+	om.mu.Lock()
+	defer om.mu.Unlock()
+
+	id := generateOperatorID()
+	if token == "" {
+		token = generateOperatorToken()
+	}
+	op := &Operator{
+		ID:        id,
+		Name:      name,
+		Role:      role,
+		Token:     token,
+		CreatedAt: time.Now().UTC(),
+	}
+	if password != "" {
+		if err := op.SetPassword(password); err != nil {
+			return nil, err
+		}
+	}
+	om.operators[id] = op
+	om.byToken[token] = id
+	om.save()
+	return op, nil
+}
+
+// GetByName returns the operator whose Name matches, or nil if not found.
+// Used by the login endpoint to look up operators by username.
+func (om *OperatorManager) GetByName(name string) *Operator {
+	if name == "" {
+		return nil
+	}
+	om.mu.RLock()
+	defer om.mu.RUnlock()
+	for _, op := range om.operators {
+		if op.Name == name {
+			snap := *op
+			return &snap
+		}
+	}
+	return nil
 }
 
 // Get returns the operator by ID, or nil if not found.
@@ -217,22 +290,24 @@ func (om *OperatorManager) save() {
 	// Use a serializable wrapper that includes the Token field (which has
 	// json:"-" on the Operator struct to prevent API leakage).
 	type persistOperator struct {
-		ID        string    `json:"id"`
-		Name      string    `json:"name"`
-		Role      string    `json:"role"`
-		Token     string    `json:"token"`
-		CreatedAt time.Time `json:"created_at"`
-		LastSeen  time.Time `json:"last_seen,omitempty"`
+		ID           string    `json:"id"`
+		Name         string    `json:"name"`
+		Role         string    `json:"role"`
+		Token        string    `json:"token"`
+		PasswordHash string    `json:"password_hash,omitempty"`
+		CreatedAt    time.Time `json:"created_at"`
+		LastSeen     time.Time `json:"last_seen,omitempty"`
 	}
 	persist := make(map[string]persistOperator, len(om.operators))
 	for id, op := range om.operators {
 		persist[id] = persistOperator{
-			ID:        op.ID,
-			Name:      op.Name,
-			Role:      op.Role,
-			Token:     op.Token,
-			CreatedAt: op.CreatedAt,
-			LastSeen:  op.LastSeen,
+			ID:           op.ID,
+			Name:         op.Name,
+			Role:         op.Role,
+			Token:        op.Token,
+			PasswordHash: op.PasswordHash,
+			CreatedAt:    op.CreatedAt,
+			LastSeen:     op.LastSeen,
 		}
 	}
 	data, err := json.MarshalIndent(persist, "", "  ")
@@ -254,12 +329,13 @@ func (om *OperatorManager) load() {
 		return // file doesn't exist yet
 	}
 	type persistOperator struct {
-		ID        string    `json:"id"`
-		Name      string    `json:"name"`
-		Role      string    `json:"role"`
-		Token     string    `json:"token"`
-		CreatedAt time.Time `json:"created_at"`
-		LastSeen  time.Time `json:"last_seen,omitempty"`
+		ID           string    `json:"id"`
+		Name         string    `json:"name"`
+		Role         string    `json:"role"`
+		Token        string    `json:"token"`
+		PasswordHash string    `json:"password_hash,omitempty"`
+		CreatedAt    time.Time `json:"created_at"`
+		LastSeen     time.Time `json:"last_seen,omitempty"`
 	}
 	var persist map[string]persistOperator
 	if err := json.Unmarshal(data, &persist); err != nil {
@@ -270,12 +346,13 @@ func (om *OperatorManager) load() {
 	om.byToken = make(map[string]string, len(persist))
 	for id, po := range persist {
 		op := &Operator{
-			ID:        po.ID,
-			Name:      po.Name,
-			Role:      po.Role,
-			Token:     po.Token,
-			CreatedAt: po.CreatedAt,
-			LastSeen:  po.LastSeen,
+			ID:           po.ID,
+			Name:         po.Name,
+			Role:         po.Role,
+			Token:        po.Token,
+			PasswordHash: po.PasswordHash,
+			CreatedAt:    po.CreatedAt,
+			LastSeen:     po.LastSeen,
 		}
 		om.operators[id] = op
 		om.byToken[po.Token] = id

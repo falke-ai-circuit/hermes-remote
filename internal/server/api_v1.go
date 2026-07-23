@@ -347,6 +347,9 @@ func (s *Server) registerV1Routes() {
 	// Screen streaming (v1)
 	s.mux.HandleFunc("POST /api/v1/agents/{id}/stream-start", s.handleV1StreamStart)
 	s.mux.HandleFunc("POST /api/v1/agents/{id}/stream-stop", s.handleV1StreamStop)
+
+	// Login endpoint (username/password → operator token)
+	s.mux.HandleFunc("POST /api/v1/login", s.handleV1Login)
 }
 
 // ---------------------------------------------------------------------------
@@ -508,4 +511,41 @@ func (s *Server) handleV1DeleteOperator(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"deleted": opID})
+}
+
+// handleV1Login authenticates an operator with username/password and returns
+// their API token. The request body must contain "username" and "password"
+// fields. On success, returns {"ok":true,"data":{"token":"...","operator":{...}}}.
+// Returns 401 on invalid credentials.
+func (s *Server) handleV1Login(w http.ResponseWriter, r *http.Request) {
+	var params struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid JSON: "+err.Error())
+		return
+	}
+	if params.Username == "" || params.Password == "" {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "username and password are required")
+		return
+	}
+
+	op := s.operators.GetByName(params.Username)
+	if op == nil {
+		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid credentials")
+		return
+	}
+	if !op.CheckPassword(params.Password) {
+		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid credentials")
+		return
+	}
+
+	// Update last-seen.
+	s.operators.UpdateLastSeen(op.ID, time.Now().UTC())
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"token":    op.Token,
+		"operator": op,
+	})
 }

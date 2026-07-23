@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -105,6 +106,12 @@ type Server struct {
 	// the React WebUI. When nil (frontend not built), Start/StartTLS uses
 	// the mux directly.
 	uiWrapper http.Handler
+
+	// IP filtering: allowed CIDR for WebUI/API routes. /ws is always open.
+	// When nil or "0.0.0.0/0", filtering is disabled (allow all).
+	allowedCIDR    *net.IPNet
+	allowedCIDRs   []*net.IPNet // additional always-allowed ranges (localhost, docker)
+	ipFilterActive bool
 }
 
 // startTime records when the server process began, used by /health for uptime.
@@ -183,6 +190,103 @@ func (s *Server) SetTokenTTL(ttl time.Duration) {
 	s.tokenTTL = ttl
 }
 
+// SetAllowedCIDR configures IP filtering for WebUI/API HTTP routes. Only
+// requests from the given CIDR (plus localhost and Docker ranges) are
+// allowed. The /ws WebSocket endpoint is always open from any IP. When cidr
+// is empty or "0.0.0.0/0", filtering is disabled (allow all). Must be called
+// before Start/StartTLS.
+func (s *Server) SetAllowedCIDR(cidr string) {
+	if cidr == "" || cidr == "0.0.0.0/0" {
+		s.ipFilterActive = false
+		return
+	}
+	_, ipNet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		log.Printf("[server] WARNING: invalid --allowed-cidr %q: %v — IP filtering disabled", cidr, err)
+		s.ipFilterActive = false
+		return
+	}
+	s.allowedCIDR = ipNet
+	s.ipFilterActive = true
+
+	// Always allow localhost. Do NOT allow 172.16.0.0/12 because Docker NAT
+	// makes external requests appear from that range, bypassing the filter.
+	for _, localCIDR := range []string{"127.0.0.0/8", "::1/128"} {
+		_, ln, err := net.ParseCIDR(localCIDR)
+		if err == nil {
+			s.allowedCIDRs = append(s.allowedCIDRs, ln)
+		}
+	}
+	log.Printf("[server] IP filtering enabled: allowed CIDR %s (+ localhost, Docker)", cidr)
+}
+
+// clientIP extracts the client IP from a request, preferring X-Forwarded-For
+// (for proxy setups) over r.RemoteAddr.
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// Use the first IP in the list (closest to the client).
+		for _, ip := range strings.Split(xff, ",") {
+			ip = strings.TrimSpace(ip)
+			if ip != "" {
+				return ip
+			}
+		}
+	}
+	// Strip port from RemoteAddr.
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+// isIPAllowed checks whether the given IP is within the allowed CIDR or any
+// of the always-allowed ranges (localhost, Docker).
+func (s *Server) isIPAllowed(ipStr string) bool {
+	if !s.ipFilterActive {
+		return true
+	}
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false
+	}
+	// Check primary CIDR.
+	if s.allowedCIDR != nil && s.allowedCIDR.Contains(ip) {
+		return true
+	}
+	// Check always-allowed ranges.
+	for _, cidr := range s.allowedCIDRs {
+		if cidr.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// ipFilterMiddleware wraps an http.Handler with IP filtering. The /ws path
+// is always allowed (probe clients connect from the internet). All other
+// paths are filtered by the configured allowed CIDR.
+func (s *Server) ipFilterMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// WebSocket endpoint is always open.
+		if r.URL.Path == "/ws" || strings.HasPrefix(r.URL.Path, "/ws/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if !s.ipFilterActive {
+			next.ServeHTTP(w, r)
+			return
+		}
+		ip := clientIP(r)
+		if !s.isIPAllowed(ip) {
+			log.Printf("[server] IP filter: 403 %s for %s", ip, r.URL.Path)
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // registerRoutes sets up all HTTP routes on the server's mux. Called once
 // by both Start and StartTLS to avoid route registration duplication.
 func (s *Server) registerRoutes() {
@@ -214,11 +318,13 @@ func (s *Server) Start() error {
 	s.mux = http.NewServeMux()
 	s.registerRoutes()
 
-	// Wrap mux with UI handler if the frontend was embedded.
+	// Wrap mux with UI handler if the frontend was embedded, then apply
+	// IP filtering middleware on top.
 	handler := http.Handler(s.mux)
 	if s.uiWrapper != nil {
 		handler = s.uiWrapper
 	}
+	handler = s.ipFilterMiddleware(handler)
 
 	s.srv = &http.Server{
 		Addr:    s.addr,
@@ -268,11 +374,13 @@ func (s *Server) StartTLS(certFile, keyFile string) error {
 
 	s.registerRoutes()
 
-	// Wrap mux with UI handler if the frontend was embedded.
+	// Wrap mux with UI handler if the frontend was embedded, then apply
+	// IP filtering middleware on top.
 	handler := http.Handler(s.mux)
 	if s.uiWrapper != nil {
 		handler = s.uiWrapper
 	}
+	handler = s.ipFilterMiddleware(handler)
 
 	s.srv = &http.Server{
 		Addr:      s.addr,
@@ -322,6 +430,12 @@ func (s *Server) Close() error {
 // called before Start/StartTLS.
 func (s *Server) SetOperatorPath(path string) {
 	s.operators = NewOperatorManager(path)
+}
+
+// Operators returns the server's OperatorManager, allowing callers to create
+// default operators, check IsEmpty, etc.
+func (s *Server) Operators() *OperatorManager {
+	return s.operators
 }
 
 // SetAuditPath configures persistent audit logging. When set, every

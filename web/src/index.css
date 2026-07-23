@@ -96,6 +96,49 @@ a:hover { text-decoration: underline; }
   text-align: center;
 }
 
+.sidebar-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.logout-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+/* Login page */
+.login-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.login-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 32px;
+  width: 360px;
+  max-width: 90vw;
+}
+
+.login-logo {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--valmet-green);
+  letter-spacing: 4px;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.login-btn {
+  width: 100%;
+  justify-content: center;
+  margin-top: 8px;
+}
+
 .main-content {
   flex: 1;
   padding: 24px 32px;

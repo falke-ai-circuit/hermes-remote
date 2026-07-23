@@ -251,3 +251,81 @@ func TestOperatorManager_UpdateLastSeen(t *testing.T) {
 		t.Errorf("LastSeen: got %v, want %v", found.LastSeen, testTime)
 	}
 }
+// TestOperator_SetPassword_CheckPassword verifies bcrypt password set/check.
+func TestOperator_SetPassword_CheckPassword(t *testing.T) {
+	op := &Operator{}
+	if err := op.SetPassword("hunter2"); err != nil {
+		t.Fatalf("SetPassword: %v", err)
+	}
+	if op.PasswordHash == "" {
+		t.Fatal("PasswordHash should not be empty after SetPassword")
+	}
+	if op.PasswordHash == "hunter2" {
+		t.Fatal("PasswordHash should not be plaintext")
+	}
+	if !op.CheckPassword("hunter2") {
+		t.Error("CheckPassword should return true for correct password")
+	}
+	if op.CheckPassword("wrong") {
+		t.Error("CheckPassword should return false for wrong password")
+	}
+	// Empty hash → always false.
+	op2 := &Operator{}
+	if op2.CheckPassword("anything") {
+		t.Error("CheckPassword should return false when no hash set")
+	}
+}
+
+// TestOperatorManager_CreateWithPassword verifies operator creation with password.
+func TestOperatorManager_CreateWithPassword(t *testing.T) {
+	om := NewOperatorManager("")
+	op, err := om.CreateWithPassword("alice", RoleAdmin, "secret123", "")
+	if err != nil {
+		t.Fatalf("CreateWithPassword: %v", err)
+	}
+	if op.PasswordHash == "" {
+		t.Error("PasswordHash should be set")
+	}
+	if !op.CheckPassword("secret123") {
+		t.Error("CheckPassword should match")
+	}
+}
+
+// TestOperatorManager_GetByName verifies name-based lookup.
+func TestOperatorManager_GetByName(t *testing.T) {
+	om := NewOperatorManager("")
+	om.Create("alice", RoleAdmin, "tok-1")
+	found := om.GetByName("alice")
+	if found == nil {
+		t.Fatal("expected operator for name 'alice'")
+	}
+	if found.Name != "alice" {
+		t.Errorf("Name: got %q, want %q", found.Name, "alice")
+	}
+	if om.GetByName("nonexistent") != nil {
+		t.Error("expected nil for unknown name")
+	}
+	if om.GetByName("") != nil {
+		t.Error("expected nil for empty name")
+	}
+}
+
+// TestOperatorManager_PasswordPersistence verifies password hash persists to disk.
+func TestOperatorManager_PasswordPersistence(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/operators.json"
+
+	om1 := NewOperatorManager(path)
+	op, _ := om1.CreateWithPassword("alice", RoleAdmin, "mypass", "tok-1")
+
+	// Reload from disk.
+	om2 := NewOperatorManager(path)
+	found := om2.GetByName("alice")
+	if found == nil {
+		t.Fatal("expected operator after reload")
+	}
+	if !found.CheckPassword("mypass") {
+		t.Error("password should persist across reload")
+	}
+	_ = op
+}

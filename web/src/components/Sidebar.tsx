@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import { clearToken } from '../api/client'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: '◉' },
@@ -10,6 +11,11 @@ const navItems = [
 ]
 
 export default function Sidebar() {
+  const handleLogout = () => {
+    clearToken()
+    window.location.reload()
+  }
+
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">PROBE</div>
@@ -26,6 +32,11 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
+      <div className="sidebar-footer">
+        <button className="btn btn-sm logout-btn" onClick={handleLogout}>
+          ⏻ Logout
+        </button>
+      </div>
     </aside>
   )
 }

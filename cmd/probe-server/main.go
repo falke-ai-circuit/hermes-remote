@@ -29,6 +29,9 @@ func main() {
 	builderPath := flag.String("builder-db", "", "agent builder records file path (default: PROBE_BUILDER_DB env or /tmp/probe-builds.json)")
 	builderOutputDir := flag.String("builder-output-dir", "", "directory for built agent binaries (default: PROBE_BUILDER_OUTPUT_DIR env or /tmp/probe-builds)")
 	profilesPath := flag.String("profiles-db", "", "build profiles file path (default: PROBE_PROFILES_DB env or /tmp/probe-profiles.json)")
+	allowedCIDR := flag.String("allowed-cidr", "100.64.0.0/10", "CIDR range allowed for WebUI/API HTTP routes (default: Tailscale 100.64.0.0/10). /ws is always open from any IP. Set to 0.0.0.0/0 to disable.")
+	adminPassword := flag.String("admin-password", "", "password for the default admin operator created on startup if no operators exist")
+	operatorPath := flag.String("operator-db", "", "operator database file path (default: PROBE_OPERATOR_DB env or /tmp/probe-operators.json)")
 	flag.Parse()
 
 	// Env vars as fallback
@@ -80,6 +83,12 @@ func main() {
 	if *profilesPath == "" {
 		*profilesPath = "/tmp/probe-profiles.json"
 	}
+	if *operatorPath == "" {
+		*operatorPath = os.Getenv("PROBE_OPERATOR_DB")
+	}
+	if *operatorPath == "" {
+		*operatorPath = "/tmp/probe-operators.json"
+	}
 
 	rlCfg := server.RateLimitConfig{
 		RatePerSec:    *rateLimit,
@@ -110,6 +119,18 @@ func main() {
 	srv.SetCADir(*caDir)
 	srv.SetBuilderPath(*builderPath, *builderOutputDir)
 	srv.SetProfilesPath(*profilesPath)
+	srv.SetOperatorPath(*operatorPath)
+	srv.SetAllowedCIDR(*allowedCIDR)
+
+	// Create default admin operator if no operators exist and --admin-password is set.
+	if *adminPassword != "" && srv.Operators().IsEmpty() {
+		op, err := srv.Operators().CreateWithPassword("admin", "admin", *adminPassword, "")
+		if err != nil {
+			log.Printf("WARNING: failed to create default admin operator: %v", err)
+		} else {
+			log.Printf("Created default admin operator (id=%s, name=%s) — log in with username 'admin'", op.ID, op.Name)
+		}
+	}
 
 	// Configure reverse proxies. Default: LOGReport proxy for backward compat.
 	var proxies []server.ProxyEntry

@@ -5,19 +5,58 @@ import type {
 
 const BASE = '/api/v1'
 
+// getToken retrieves the auth token from localStorage. Returns empty string
+// if not set (user not logged in).
+export function getToken(): string {
+  return localStorage.getItem('probe_token') || ''
+}
+
+// setToken stores the auth token in localStorage.
+export function setToken(token: string) {
+  localStorage.setItem('probe_token', token)
+}
+
+// clearToken removes the auth token from localStorage (logout).
+export function clearToken() {
+  localStorage.removeItem('probe_token')
+}
+
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = getToken()
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options?.headers,
     },
   })
+  // Handle 401: clear token and redirect to login.
+  if (res.status === 401) {
+    clearToken()
+    window.location.reload()
+    throw new Error('Unauthorized')
+  }
   const body: APIResponse<T> = await res.json()
   if (!body.ok) {
     throw new Error(body.error?.message || `HTTP ${res.status}`)
   }
   return body.data as T
+}
+
+// login authenticates with username/password and stores the token.
+export async function login(username: string, password: string): Promise<Operator> {
+  const res = await fetch(`${BASE}/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+  const body: APIResponse<{ token: string; operator: Operator }> = await res.json()
+  if (!body.ok) {
+    throw new Error(body.error?.message || 'Login failed')
+  }
+  setToken(body.data!.token)
+  return body.data!.operator
 }
 
 export const api = {

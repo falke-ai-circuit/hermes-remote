@@ -7,8 +7,17 @@ import Builder from './pages/Builder'
 import Profiles from './pages/Profiles'
 import Tasks from './pages/Tasks'
 import Settings from './pages/Settings'
+import Login from './pages/Login'
+import { getToken } from './api/client'
 
 export default function App() {
+  const token = getToken()
+
+  // If not authenticated, show the login page.
+  if (!token) {
+    return <Login />
+  }
+
   return (
     <div className="app-layout">
       <Sidebar />

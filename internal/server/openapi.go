@@ -494,6 +494,27 @@ func openapiSpec() map[string]interface{} {
 		},
 	}
 
+	// Login endpoint
+	loginSchema := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"username": map[string]interface{}{"type": "string"},
+			"password": map[string]interface{}{"type": "string", "format": "password"},
+		},
+		"required": []string{"username", "password"},
+	}
+	paths["/api/v1/login"] = map[string]interface{}{
+		"post": map[string]interface{}{
+			"summary":     "Login",
+			"description": "Authenticates an operator with username/password and returns their API token.",
+			"requestBody": requestBody(loginSchema),
+			"responses": map[string]interface{}{
+				"200": okResponse("Login successful — returns token and operator"),
+				"401": errorResponse("UNAUTHORIZED", "Invalid credentials"),
+			},
+		},
+	}
+
 	return map[string]interface{}{
 		"openapi": "3.0.3",
 		"info": map[string]interface{}{
