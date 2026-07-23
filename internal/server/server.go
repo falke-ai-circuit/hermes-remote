@@ -159,7 +159,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/ws", s.handleWebSocket)
 	// Health endpoint
 	s.mux.HandleFunc("/health", s.handleHealth)
-	// HTTP API endpoints
+	// HTTP API endpoints (legacy — kept for backward compatibility)
 	s.mux.HandleFunc("/api/agents", s.handleListAgents)
 	s.mux.HandleFunc("/api/agent/", s.handleAgentRoute)
 	// File download endpoint (serves files from /tmp/probe-files/)
@@ -167,6 +167,12 @@ func (s *Server) registerRoutes() {
 	// Also serve downloads under /api/download/ for Docker proxy compatibility
 	s.mux.HandleFunc("/api/download/", s.handleFileDownload)
 	s.mux.HandleFunc("/logreport/", s.handleLogReportProxy)
+
+	// REST API v1 — versioned, consistent response format, Go 1.22 patterns.
+	s.registerV1Routes()
+
+	// OpenAPI 3.0 specification endpoint.
+	s.mux.HandleFunc("GET /openapi.json", s.handleOpenAPI)
 }
 
 // Start begins listening for WebSocket and HTTP connections.
