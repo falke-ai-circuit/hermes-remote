@@ -32,6 +32,7 @@ func main() {
 	allowedCIDR := flag.String("allowed-cidr", "100.64.0.0/10", "CIDR range allowed for WebUI/API HTTP routes (default: Tailscale 100.64.0.0/10). /ws is always open from any IP. Set to 0.0.0.0/0 to disable.")
 	adminPassword := flag.String("admin-password", "", "password for the default admin operator created on startup if no operators exist")
 	operatorPath := flag.String("operator-db", "", "operator database file path (default: PROBE_OPERATOR_DB env or /tmp/probe-operators.json)")
+	vtAPIKey := flag.String("vt-api-key", "", "VirusTotal API key for auto-scan after build and manual scan API (default: PROBE_VT_API_KEY env)")
 	flag.Parse()
 
 	// Env vars as fallback
@@ -89,6 +90,9 @@ func main() {
 	if *operatorPath == "" {
 		*operatorPath = "/tmp/probe-operators.json"
 	}
+	if *vtAPIKey == "" {
+		*vtAPIKey = os.Getenv("PROBE_VT_API_KEY")
+	}
 
 	rlCfg := server.RateLimitConfig{
 		RatePerSec:    *rateLimit,
@@ -121,6 +125,12 @@ func main() {
 	srv.SetProfilesPath(*profilesPath)
 	srv.SetOperatorPath(*operatorPath)
 	srv.SetAllowedCIDR(*allowedCIDR)
+
+	// Configure VirusTotal scanner if API key is provided.
+	if *vtAPIKey != "" {
+		srv.SetVTAPIKey(*vtAPIKey)
+		log.Printf("VirusTotal auto-scan enabled")
+	}
 
 	// Create default admin operator if no operators exist and --admin-password is set.
 	if *adminPassword != "" && srv.Operators().IsEmpty() {

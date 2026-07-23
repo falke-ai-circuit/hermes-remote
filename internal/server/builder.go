@@ -38,6 +38,9 @@ type BuildConfig struct {
 	CreatedAt    time.Time       `json:"created_at"`
 	CompletedAt  *time.Time      `json:"completed_at,omitempty"`
 	Error        string          `json:"error,omitempty"`
+	VTStatus      string `json:"vt_status,omitempty"`     // pending, scanning, clean, dirty
+	VTDetections  int    `json:"vt_detections,omitempty"`
+	VTReportURL   string `json:"vt_report_url,omitempty"`
 }
 
 // DisguiseConfig holds PE metadata used to disguise the agent binary on Windows.
@@ -55,6 +58,14 @@ const (
 	BuildStatusBuilding = "building"
 	BuildStatusComplete = "complete"
 	BuildStatusFailed   = "failed"
+)
+
+// VTStatus constants for VirusTotal scan state tracking.
+const (
+	VTStatusPending = "pending"
+	VTStatusScanning = "scanning"
+	VTStatusClean   = "clean"
+	VTStatusDirty   = "dirty"
 )
 
 // DefaultBuildOutputDir is the directory where built agent binaries are stored.
@@ -100,6 +111,7 @@ type BuilderManager struct {
 	outputDir  string
 	goBinPath  string // path to the go binary (default: "go")
 	clientPkg  string // path to the probe-client package (default: "./cmd/probe-client/")
+	vtScanner  *VirusTotalScanner // optional VT scanner for auto-scan after build
 }
 
 // NewBuilderManager creates a new BuilderManager. If savePath is non-empty,
@@ -136,6 +148,15 @@ func (bm *BuilderManager) SetClientPkg(pkg string) {
 	if pkg != "" {
 		bm.clientPkg = pkg
 	}
+}
+
+// SetVTScanner configures a VirusTotal scanner for auto-scan after build.
+// When set, runBuild will automatically trigger a VT scan in a goroutine
+// after a build completes successfully.
+func (bm *BuilderManager) SetVTScanner(scanner *VirusTotalScanner) {
+	bm.mu.Lock()
+	defer bm.mu.Unlock()
+	bm.vtScanner = scanner
 }
 
 // CreateBuild validates the BuildConfig, assigns an ID, stores it, and starts
@@ -252,6 +273,14 @@ func (bm *BuilderManager) runBuild(id string) {
 	bm.mu.Unlock()
 
 	log.Printf("[builder] build %s complete: %s", id, outputPath)
+
+	// Auto VT scan: if a scanner is configured, start a VT scan in a goroutine.
+	bm.mu.RLock()
+	scanner := bm.vtScanner
+	bm.mu.RUnlock()
+	if scanner != nil {
+		go bm.autoVTScan(id, outputPath, scanner)
+	}
 }
 
 // failBuild marks a build as failed with the given error message.
@@ -266,6 +295,39 @@ func (bm *BuilderManager) failBuild(id, errMsg string) {
 		bm.save()
 	}
 	log.Printf("[builder] build %s failed: %s", id, errMsg)
+}
+
+// autoVTScan runs a VirusTotal scan on a built binary and updates the build
+// record with the results. Called in a goroutine from runBuild.
+func (bm *BuilderManager) autoVTScan(id, binaryPath string, scanner *VirusTotalScanner) {
+	bm.UpdateVTStatus(id, VTStatusScanning, 0, "")
+
+	log.Printf("[builder] auto VT scan started for build %s", id)
+	report, err := scanner.ScanFile(binaryPath)
+	if err != nil {
+		log.Printf("[builder] auto VT scan failed for build %s: %v", id, err)
+		bm.UpdateVTStatus(id, "failed", 0, "")
+		return
+	}
+
+	status := VTStatusClean
+	if report.Detections > 0 {
+		status = VTStatusDirty
+	}
+	bm.UpdateVTStatus(id, status, report.Detections, report.ReportURL)
+	log.Printf("[builder] auto VT scan complete for build %s: %d/%d detections", id, report.Detections, report.Total)
+}
+
+// UpdateVTStatus updates the VT scan fields on a build record and persists.
+func (bm *BuilderManager) UpdateVTStatus(id, status string, detections int, reportURL string) {
+	bm.mu.Lock()
+	defer bm.mu.Unlock()
+	if b, ok := bm.builds[id]; ok {
+		b.VTStatus = status
+		b.VTDetections = detections
+		b.VTReportURL = reportURL
+		bm.save()
+	}
 }
 
 // buildCommand constructs the exec.Cmd for cross-compiling the probe-client

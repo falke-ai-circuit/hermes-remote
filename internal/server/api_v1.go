@@ -233,6 +233,10 @@ func (s *Server) registerV1Routes() {
 	s.mux.HandleFunc("DELETE /api/v1/agents/{id}", s.handleV1DeleteAgent)
 	s.mux.HandleFunc("GET /api/v1/agents/{id}/health", s.handleV1AgentHealth)
 	s.mux.HandleFunc("GET /api/v1/agents/{id}/audit", s.handleV1AgentAudit)
+	s.mux.HandleFunc("GET /api/v1/agents/{id}/capabilities", s.handleV1GetAgentCapabilities)
+
+	// Agent endpoints — redeploy
+	s.mux.HandleFunc("POST /api/v1/agents/{id}/redeploy", s.handleV1RedeployAgent)
 
 	// Agent endpoints — commands (all POST)
 	s.mux.HandleFunc("POST /api/v1/agents/{id}/exec",
@@ -319,6 +323,10 @@ func (s *Server) registerV1Routes() {
 	s.mux.HandleFunc("GET /api/v1/builds/{id}", s.handleV1GetBuild)
 	s.mux.HandleFunc("GET /api/v1/builds/{id}/download", s.handleV1DownloadBuild)
 	s.mux.HandleFunc("DELETE /api/v1/builds/{id}", s.handleV1DeleteBuild)
+
+	// VirusTotal scan (build-level)
+	s.mux.HandleFunc("POST /api/v1/builds/{id}/vt-scan", s.handleV1VTScan)
+	s.mux.HandleFunc("GET /api/v1/builds/{id}/vt-scan", s.handleV1GetVTScan)
 
 	// Build profiles (Phase 4)
 	s.mux.HandleFunc("GET /api/v1/profiles", s.handleV1ListProfiles)

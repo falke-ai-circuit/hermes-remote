@@ -96,6 +96,9 @@ type Server struct {
 	// Build profiles: reusable build configuration templates.
 	profiles *ProfileManager
 
+	// VirusTotal scanner: optional, for auto-scan after build and manual scan API.
+	vtScanner *VirusTotalScanner
+
 	// Task scheduler: delayed, recurring, and offline-queued tasks.
 	tasks *TaskManager
 
@@ -472,6 +475,18 @@ func (s *Server) SetBuilderPath(path, outputDir string) {
 // called before Start/StartTLS.
 func (s *Server) SetProfilesPath(path string) {
 	s.profiles = NewProfileManager(path)
+}
+
+// SetVTAPIKey configures the VirusTotal scanner with the given API key.
+// When set, builds are automatically scanned after completion and the
+// manual VT scan API endpoints are available. Must be called before
+// Start/StartTLS.
+func (s *Server) SetVTAPIKey(apiKey string) {
+	if apiKey == "" {
+		return
+	}
+	s.vtScanner = NewVirusTotalScanner(apiKey)
+	s.builder.SetVTScanner(s.vtScanner)
 }
 
 // SetTasksPath configures persistent task storage. When set, scheduled tasks
