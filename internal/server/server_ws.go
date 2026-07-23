@@ -167,6 +167,18 @@ func (s *Server) handleMessages(agentID string, conn *websocket.Conn) {
 			}
 
 		case protocol.TypeError:
+			// Error responses from agents may be replies to pending requests
+			// (e.g. "not yet implemented" for stub capabilities). Check
+			// pendingReqs FIRST so the HTTP handler gets the error instead
+			// of timing out.
+			s.pendingMu.Lock()
+			if ch, ok := s.pendingReqs[env.ID]; ok {
+				delete(s.pendingReqs, env.ID)
+				s.pendingMu.Unlock()
+				ch <- env
+				continue
+			}
+			s.pendingMu.Unlock()
 			if env.Error != nil {
 				s.registry.RecordError(agentID, env.Error.Message)
 			}
