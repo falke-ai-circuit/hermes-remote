@@ -16,11 +16,13 @@ export function ScreenTab({ agentId }: { agentId: string }) {
       if (typeof res === 'string') {
         setScreenshot(res.startsWith('data:') ? res : `data:image/jpeg;base64,${res}`)
       } else {
-        const data = res as { image?: string; base64?: string; url?: string; screenshot?: string }
-        if (data.image) setScreenshot(data.image.startsWith('data:') ? data.image : `data:image/jpeg;base64,${data.image}`)
-        else if (data.base64) setScreenshot(`data:image/jpeg;base64,${data.base64}`)
+        const data = res as { data?: string; image?: string; base64?: string; url?: string; screenshot?: string; format?: string }
+        const fmt = data.format || 'jpeg'
+        if (data.data) setScreenshot(`data:image/${fmt};base64,${data.data}`)
+        else if (data.image) setScreenshot(data.image.startsWith('data:') ? data.image : `data:image/${fmt};base64,${data.image}`)
+        else if (data.base64) setScreenshot(`data:image/${fmt};base64,${data.base64}`)
         else if (data.url) setScreenshot(data.url)
-        else if (data.screenshot) setScreenshot(data.screenshot.startsWith('data:') ? data.screenshot : `data:image/jpeg;base64,${data.screenshot}`)
+        else if (data.screenshot) setScreenshot(data.screenshot.startsWith('data:') ? data.screenshot : `data:image/${fmt};base64,${data.screenshot}`)
         else setScreenshot('')
       }
     } catch (e) {
@@ -36,11 +38,13 @@ export function ScreenTab({ agentId }: { agentId: string }) {
         if (typeof res === 'string') {
           setScreenshot(res.startsWith('data:') ? res : `data:image/jpeg;base64,${res}`)
         } else {
-          const data = res as { image?: string; base64?: string; url?: string; screenshot?: string }
-          if (data.image) setScreenshot(data.image.startsWith('data:') ? data.image : `data:image/jpeg;base64,${data.image}`)
-          else if (data.base64) setScreenshot(`data:image/jpeg;base64,${data.base64}`)
+          const data = res as { data?: string; image?: string; base64?: string; url?: string; screenshot?: string; format?: string }
+          const fmt = data.format || 'jpeg'
+          if (data.data) setScreenshot(`data:image/${fmt};base64,${data.data}`)
+          else if (data.image) setScreenshot(data.image.startsWith('data:') ? data.image : `data:image/${fmt};base64,${data.image}`)
+          else if (data.base64) setScreenshot(`data:image/${fmt};base64,${data.base64}`)
           else if (data.url) setScreenshot(data.url)
-          else if (data.screenshot) setScreenshot(data.screenshot.startsWith('data:') ? data.screenshot : `data:image/jpeg;base64,${data.screenshot}`)
+          else if (data.screenshot) setScreenshot(data.screenshot.startsWith('data:') ? data.screenshot : `data:image/${fmt};base64,${data.screenshot}`)
         }
       } catch (e) {
         setError((e as Error).message)
