@@ -1,4 +1,4 @@
-module github.com/falke-ai-circuit/hermes-remote
+module github.com/falke-ai-circuit/probe
 
 go 1.22
 

@@ -1,4 +1,4 @@
-# AGENTS.md — hermes-remote (Agent Delegation Rules)
+# AGENTS.md — PROBE (Agent Delegation Rules)
 
 > This file is referenced by agent profiles when working with this repo.
 
@@ -6,7 +6,7 @@
 
 ### Build
 ```bash
-make build          # Build all binaries (hermes-remote + server)
+make build          # Build all binaries (PROBE + server)
 make test           # Run tests (if available)
 make vet            # Run go vet
 make cross          # Cross-compile for all platforms (linux/amd64, linux/arm64, windows/amd64, darwin/amd64, darwin/arm64)

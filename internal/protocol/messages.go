@@ -501,8 +501,8 @@ type ProcStartResult struct {
 // it as a new process, and reports its own PID back so the server can kill it
 // once the new agent connects.
 type AgentUpdateParams struct {
-	DownloadURL string `json:"download_url"` // e.g. "http://server:80/download/HermesRemote_v9.exe"
-	Filename    string `json:"filename"`     // e.g. "HermesRemote_v9.exe"
+	DownloadURL string `json:"download_url"` // e.g. "http://server:80/download/PROBE_v9.exe"
+	Filename    string `json:"filename"`     // e.g. "PROBE_v9.exe"
 	SHA256      string `json:"sha256"`       // expected hash of the downloaded binary
 	Version     string `json:"version"`      // new version label (for logging)
 }

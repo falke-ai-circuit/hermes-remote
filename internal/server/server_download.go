@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// handleFileDownload serves files from /tmp/hermes-remote-files/ over HTTP.
+// handleFileDownload serves files from /tmp/probe-files/ over HTTP.
 // This allows the agent to download large files (like updated binaries) from
 // the server without hitting command-line length limits.
 //
@@ -47,7 +47,7 @@ func (s *Server) handleFileDownload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid filename", http.StatusBadRequest)
 		return
 	}
-	filepath := "/tmp/hermes-remote-files/" + filename
+	filepath := "/tmp/probe-files/" + filename
 	http.ServeFile(w, r, filepath)
 }
 
@@ -67,6 +67,6 @@ func (s *Server) handleFileDownloadBody(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "invalid filename", http.StatusBadRequest)
 		return
 	}
-	filepath := "/tmp/hermes-remote-files/" + params.Filename
+	filepath := "/tmp/probe-files/" + params.Filename
 	http.ServeFile(w, r, filepath)
 }

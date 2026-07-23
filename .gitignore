@@ -1,7 +1,7 @@
 build/
-cmd/hermes-remote/hermes-remote
-cmd/hermes-remote/resource.syso
-cmd/server/server
+cmd/probe-client/probe-client
+cmd/probe-client/resource.syso
+cmd/probe-server/probe-server
 *.exe
 *.test
 *.out

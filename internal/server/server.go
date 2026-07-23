@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/falke-ai-circuit/hermes-remote/internal/protocol"
+	"github.com/falke-ai-circuit/probe/internal/protocol"
 	"github.com/gorilla/websocket"
 )
 
@@ -153,7 +153,7 @@ func (s *Server) registerRoutes() {
 	// HTTP API endpoints
 	s.mux.HandleFunc("/api/agents", s.handleListAgents)
 	s.mux.HandleFunc("/api/agent/", s.handleAgentRoute)
-	// File download endpoint (serves files from /tmp/hermes-remote-files/)
+	// File download endpoint (serves files from /tmp/probe-files/)
 	s.mux.HandleFunc("/download/", s.handleFileDownload)
 	// Also serve downloads under /api/download/ for Docker proxy compatibility
 	s.mux.HandleFunc("/api/download/", s.handleFileDownload)

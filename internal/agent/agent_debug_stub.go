@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/falke-ai-circuit/hermes-remote/internal/protocol"
+	"github.com/falke-ai-circuit/probe/internal/protocol"
 )
 
 // debugManager is a no-op on non-Windows platforms.

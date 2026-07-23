@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/falke-ai-circuit/hermes-remote/internal/protocol"
+	"github.com/falke-ai-circuit/probe/internal/protocol"
 )
 
 // Tunnel represents a server-side TCP listener that relays connections

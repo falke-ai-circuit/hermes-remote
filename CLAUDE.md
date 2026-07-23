@@ -1,10 +1,10 @@
-# CLAUDE.md — hermes-remote
+# CLAUDE.md — PROBE
 
-This is the hermes-remote project — a remote agent for the Hermes ecosystem.
+This is the PROBE project — a remote agent for the Hermes ecosystem.
 
 ## What It Is
 
-A single Go binary (`hermes-remote`) that runs Hermes natively on remote machines, using the main server's LLM infrastructure. No API keys on the remote. No SSH tunnels. Just Hermes, running wherever you put it.
+A single Go binary (`probe-client`) that runs Hermes natively on remote machines, using the main server's LLM infrastructure. No API keys on the remote. No SSH tunnels. Just Hermes, running wherever you put it.
 
 ## How to Build
 
@@ -15,7 +15,7 @@ make cross          # Cross-compile for all platforms
 
 Or manually:
 ```bash
-go build ./cmd/hermes-remote/    # Agent binary
+go build ./cmd/probe-client/    # Agent binary
 go build ./cmd/server/           # Server binary
 ```
 
@@ -25,7 +25,7 @@ go build ./cmd/server/           # Server binary
 # Server (on main machine)
 ./cmd/server/server --addr :7700 --token "hermes.circuit.remote.2026"
 
-# Agent — create a JSON config file (hermes-remote.json):
+# Agent — create a JSON config file (probe-client.json):
 # {
 #   "server": "wss://server:7700",
 #   "token": "...",
@@ -34,19 +34,19 @@ go build ./cmd/server/           # Server binary
 # }
 
 # Agent — silent mode (daemon, controlled via operative profile)
-./cmd/hermes-remote/hermes-remote --config hermes-remote.json
+./cmd/probe-client/probe-client --config probe-client.json
 
 # Agent — interactive mode (full Hermes CLI on remote)
 # Set "mode": "interactive" in the config file, then:
-./cmd/hermes-remote/hermes-remote --config hermes-remote.json
+./cmd/probe-client/probe-client --config probe-client.json
 
 # Agent — dual mode (daemon + accepts inbound connections)
 # Set "listen": ":7700" in the config file, then:
-./cmd/hermes-remote/hermes-remote --config hermes-remote.json
+./cmd/probe-client/probe-client --config probe-client.json
 
 # Windows build (with version info + stripped symbols)
 make windows
-# → ./build/HermesRemote.exe --config hermes-remote.json
+# → ./build/ProbeClient.exe --config probe-client.json
 ```
 
 ## Architecture
@@ -60,9 +60,9 @@ The agent runs a full Hermes agent loop (system prompt → LLM call → tool dis
 ## Project Structure
 
 ```
-hermes-remote/
+probe/
 ├── cmd/
-│   ├── hermes-remote/    # Agent binary (CLI entry point)
+│   ├── probe-client/    # Agent binary (CLI entry point)
 │   └── server/           # Server binary
 ├── internal/
 │   ├── agent/            # Agent loop, connection management, command dispatch
@@ -90,7 +90,7 @@ hermes-remote/
 
 ## Key Facts
 
-- **Module path:** `github.com/falke-ai-circuit/hermes-remote`
+- **Module path:** `github.com/falke-ai-circuit/probe`
 - **Go version:** 1.22.5 (at `/opt/data/go/bin/go`)
 - **Single dependency:** `gorilla/websocket v1.5.3`
 - **Protocol:** WebSocket + JSON envelope, 25 command types, 9 error codes

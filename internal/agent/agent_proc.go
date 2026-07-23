@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/falke-ai-circuit/hermes-remote/internal/protocol"
+	"github.com/falke-ai-circuit/probe/internal/protocol"
 )
 
 // handleProcList returns a list of running processes on the agent machine.

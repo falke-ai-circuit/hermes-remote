@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/falke-ai-circuit/hermes-remote/internal/protocol"
+	"github.com/falke-ai-circuit/probe/internal/protocol"
 )
 
 // New creates a macOS platform with the given agent name.

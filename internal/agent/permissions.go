@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/falke-ai-circuit/hermes-remote/internal/protocol"
+	"github.com/falke-ai-circuit/probe/internal/protocol"
 )
 
 // Permission tier constants
@@ -43,8 +43,21 @@ var destructiveExecPatterns = []string{
 }
 
 // isDestructiveCommand checks if a command string matches any destructive pattern.
+// The command is normalized before matching to catch trivial evasions:
+//   - Tabs and multiple spaces are collapsed to single spaces
+//   - PowerShell $IFS variable expansion is stripped
+//   - Matching is case-insensitive
 func isDestructiveCommand(cmd string) bool {
 	lower := strings.ToLower(strings.TrimSpace(cmd))
+	// Strip PowerShell $IFS variable used to split words without spaces.
+	lower = strings.ReplaceAll(lower, "$ifs", "")
+	// Normalize tabs and multiple spaces to single spaces so patterns
+	// like "del	" or "rm    " are caught.
+	lower = strings.ReplaceAll(lower, "	", " ")
+	// Collapse runs of spaces into a single space.
+	for strings.Contains(lower, "  ") {
+		lower = strings.ReplaceAll(lower, "  ", " ")
+	}
 	for _, pattern := range destructiveExecPatterns {
 		if strings.Contains(lower, pattern) {
 			return true

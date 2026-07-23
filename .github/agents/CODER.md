@@ -1,4 +1,4 @@
-# CODER.md — Agent Brief for hermes-remote
+# CODER.md — Agent Brief for PROBE
 
 ## Role
 Go developer. Implement features per architect's blueprint, one commit per milestone.
@@ -15,7 +15,7 @@ LANE: <lane-id>
 ROLE: coder
 TOOLS: terminal, read_file, search_files, write_file, patch
 
-TASK: Implement <milestone> for hermes-remote.
+TASK: Implement <milestone> for PROBE.
 
 INPUT:
 - Architect's blueprint: <path>

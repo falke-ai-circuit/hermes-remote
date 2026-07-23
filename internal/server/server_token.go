@@ -8,7 +8,7 @@ import (
 	"log"
 	"net/http"
 	"time"
-	"github.com/falke-ai-circuit/hermes-remote/internal/protocol"
+	"github.com/falke-ai-circuit/probe/internal/protocol"
 )
 
 

@@ -1,4 +1,4 @@
-"""Hermes Remote plugin — registers 5 tools for remote agent control.
+"""PROBE plugin — registers 5 tools for remote agent control.
 
 Tools registered:
   - remote_agent_list   : GET  /api/agents
@@ -8,8 +8,8 @@ Tools registered:
   - remote_capture    : POST /api/agent/{id}/capture
 
 Environment:
-  HERMES_REMOTE_TOKEN   : bearer token (required)
-  HERMES_REMOTE_URL     : server base URL (default http://localhost:7700)
+  PROBE_TOKEN   : bearer token (required)
+  PROBE_URL     : server base URL (default http://localhost:7700)
 """
 
 from __future__ import annotations
@@ -26,15 +26,15 @@ import requests
 # ---------------------------------------------------------------------------
 
 def _base_url() -> str:
-    return os.environ.get("HERMES_REMOTE_URL", "http://localhost:7700")
+    return os.environ.get("PROBE_URL", "http://localhost:7700")
 
 
 def _token() -> str:
-    return os.environ.get("HERMES_REMOTE_TOKEN", "")
+    return os.environ.get("PROBE_TOKEN", "")
 
 
 def _req(method: str, path: str, json_body: dict | None = None) -> dict:
-    """Make an HTTP request to the hermes-remote server.  Returns a dict
+    """Make an HTTP request to the PROBE server.  Returns a dict
     of the form {ok, status, body} for downstream formatting."""
     url = f"{_base_url().rstrip('/')}{path}"
     headers = {}
@@ -64,7 +64,7 @@ def _format_result(r: dict) -> str:
 
 
 def _check_available() -> bool:
-    """Return True when the hermes-remote server is reachable."""
+    """Return True when the PROBE server is reachable."""
     try:
         requests.get(f"{_base_url().rstrip('/')}/api/agents", timeout=5)
         return True
@@ -128,7 +128,7 @@ def _handle_capture(args: dict, **kw) -> str:
 
 AGENT_LIST_SCHEMA = {
     "name": "remote_agent_list",
-    "description": "List all registered remote agents from the hermes-remote server.",
+    "description": "List all registered remote agents from the PROBE server.",
     "parameters": {
         "type": "object",
         "properties": {},
@@ -200,7 +200,7 @@ CAPTURE_SCHEMA = {
 # ---------------------------------------------------------------------------
 
 def register(ctx) -> None:
-    """Register all 5 hermes-remote tools. Called by the plugin loader."""
+    """Register all 5 PROBE tools. Called by the plugin loader."""
     tools = (
         ("remote_agent_list", AGENT_LIST_SCHEMA, _handle_agent_list, "📋"),
         ("remote_exec", EXEC_SCHEMA, _handle_exec, "💻"),
@@ -212,7 +212,7 @@ def register(ctx) -> None:
     for name, schema, handler, emoji in tools:
         ctx.register_tool(
             name=name,
-            toolset="hermes-remote",
+            toolset="probe",
             schema=schema,
             handler=handler,
             check_fn=_check_available,

@@ -1,0 +1,27 @@
+{
+  "RT_VERSION": {
+    "#1": {
+      "fixed": {
+        "file_version": "0.1.0.0",
+        "product_version": "0.1.0.0"
+      },
+      "info": {
+        "0000": {
+          "CompanyName": "Falke AI Circuit",
+          "FileDescription": "PROBE Client",
+          "FileVersion": "0.1.0.0",
+          "InternalName": "PROBE",
+          "LegalCopyright": "\u00a9 2026 Falke AI Circuit. MIT License.",
+          "OriginalFilename": "ProbeClient.exe",
+          "ProductName": "PROBE Client",
+          "ProductVersion": "0.1.0.0"
+        }
+      }
+    }
+  },
+  "RT_MANIFEST": {
+    "#1": {
+      "path": "app.manifest"
+    }
+  }
+}

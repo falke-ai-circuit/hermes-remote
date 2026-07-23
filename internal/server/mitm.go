@@ -6,7 +6,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/falke-ai-circuit/hermes-remote/internal/protocol"
+	"github.com/falke-ai-circuit/probe/internal/protocol"
 )
 
 // handleAgentMitmStart starts a MITM TCP proxy on the agent.

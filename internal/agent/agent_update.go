@@ -11,7 +11,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/falke-ai-circuit/hermes-remote/internal/protocol"
+	"github.com/falke-ai-circuit/probe/internal/protocol"
 )
 
 // handleAgentUpdate downloads a new binary, verifies it, starts it as a new
@@ -150,7 +150,7 @@ func hashFile(path string) (string, error) {
 }
 
 // getConfigPath extracts the -config flag value from os.Args.
-// Falls back to "hermes-remote.json" if not found.
+// Falls back to "probe-client.json" if not found.
 func getConfigPath() string {
 	for i, arg := range os.Args {
 		if arg == "-config" || arg == "--config" {
@@ -165,7 +165,7 @@ func getConfigPath() string {
 			return arg[9:]
 		}
 	}
-	return "hermes-remote.json"
+	return "probe-client.json"
 }
 
 // getSysProcAttr is defined in sysprocattr_windows.go / sysprocattr_other.go

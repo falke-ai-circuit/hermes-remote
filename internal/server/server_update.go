@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/falke-ai-circuit/hermes-remote/internal/protocol"
+	"github.com/falke-ai-circuit/probe/internal/protocol"
 )
 
 // pendingUpdates tracks agents that have been told to update.
@@ -25,7 +25,7 @@ type pendingUpdate struct {
 }
 
 // handleAgentUpdate is the HTTP API endpoint that triggers a remote agent update.
-// POST /api/agent/{id}/update  body: {"binary_path":"/tmp/hermes-remote-files/HermesRemote_v9.exe","version":"v9"}
+// POST /api/agent/{id}/update  body: {"binary_path":"/tmp/probe-files/PROBE_v9.exe","version":"v9"}
 //
 // The server:
 //  1. Computes SHA256 of the binary file
@@ -58,7 +58,7 @@ func (s *Server) handleAgentUpdate(w http.ResponseWriter, r *http.Request, agent
 	filename := filepath.Base(params.BinaryPath)
 
 	// Copy binary to the download directory if not already there
-	downloadDir := "/tmp/hermes-remote-files/"
+	downloadDir := "/tmp/probe-files/"
 	downloadPath := downloadDir + filename
 	if params.BinaryPath != downloadPath {
 		if err := copyFile(params.BinaryPath, downloadPath); err != nil {

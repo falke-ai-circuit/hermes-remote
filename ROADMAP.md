@@ -1,4 +1,4 @@
-# ROADMAP — hermes-remote v0.1.0-a0
+# ROADMAP — PROBE v0.1.0-a0
 
 ## Phase Overview
 
@@ -32,7 +32,7 @@
 ### B3: Agent Layer + CLI
 - `internal/agent/` — agent.go (loop + dispatch)
 - `internal/platform/` — platform.go (interface), platform_linux.go (bash, xdotool, import/scrot, xclip)
-- `cmd/hermes-remote/main.go` — CLI flags (--connect, --listen, --mode, --token, --name)
+- `cmd/probe-client/main.go` — CLI flags (--connect, --listen, --mode, --token, --name)
 - Compiles to binary ✅
 
 ### B4: Plugin + Tools
@@ -47,7 +47,7 @@
 | All packages compile | ✅ `go build ./...` exits 0 |
 | go vet | ✅ All .go files pass |
 | Server starts | ✅ `./server --addr :7700` binds |
-| Agent connects | ✅ `./hermes-remote --connect wss://localhost:7700 --mode silent` registers |
+| Agent connects | ✅ `./probe-client --connect wss://localhost:7700 --mode silent` registers |
 | Plugin tools | ✅ All 5 remote_* tools registered |
 
 ### Bugs Fixed (8 across 6 files)
@@ -58,7 +58,7 @@
 | 2 | `internal/protocol/websocket.go` | TLS scheme detection (wss:// vs ws://) |
 | 3 | `internal/agent/agent.go` | Process-group timeout for subprocess cleanup |
 | 4 | `internal/server/server.go` | /health endpoint added |
-| 5 | `cmd/hermes-remote/main.go` | Append /ws path to connect URL if missing |
+| 5 | `cmd/probe-client/main.go` | Append /ws path to connect URL if missing |
 | 6 | `tool/plugin.py` | Tool registration fixes |
 | 7 | `internal/protocol/messages.go` | Message type validation |
 | 8 | `internal/agent/agent.go` | Connection state machine fixes |
@@ -137,7 +137,7 @@
 - **Enhanced agent `handleTokenRotate`**: updates `a.cfg.Token` + `a.tokenExpiry`, persists to `TokenFile` (0600), logs rotation, returns proper `TokenRotateResult`
 - **Agent proactive refresh**: `handleConnection` gains 60s `refreshTicker`; within 5 min of expiry sends `TypeTokenRefresh`
 - **NEW `LoadPersistedToken(path)`** — exported helper; agent loads persisted token at startup if no `--token` given
-- **CLI flags**: `--token-ttl` (server, default 24h, 0=disabled), `--token-file` (agent, default `.hermes-remote-token`)
+- **CLI flags**: `--token-ttl` (server, default 24h, 0=disabled), `--token-file` (agent, default `.probe-token`)
 - Zero new deps (stdlib `crypto/rand`, `encoding/hex`, `os`). Build + vet + tests + cross-compile pass
 
 ### E7: TLS Mutual Authentication ✅ (`201c77d`) — FINAL PHASE E COMMIT

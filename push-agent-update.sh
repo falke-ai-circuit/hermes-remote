@@ -1,8 +1,8 @@
 #!/bin/bash
-# HermesRemote Agent Auto-Update Script
+# PROBE Agent Auto-Update Script
 # Usage: ./push-agent-update.sh <version_label> [binary_path]
 # 
-# Example: ./push-agent-update.sh v9c-v0.2.2 /opt/data/workspace-operative/hermes-remote/HermesRemote_v9c.exe
+# Example: ./push-agent-update.sh v9c-v0.2.2 /opt/data/workspace-operative/probe/PROBE_v9c.exe
 #
 # This script:
 # 1. Cross-compiles the Windows agent binary (if binary_path not given)
@@ -17,31 +17,31 @@ VPS_IP="187.124.31.229"
 SSH_KEY=~/.ssh/hermes_desktop
 VPS_USER="root"
 AGENT_ID="a0-falke"
-REPO_DIR="/opt/data/workspace-operative/hermes-remote"
+REPO_DIR="/opt/data/workspace-operative/probe"
 
 VERSION_LABEL="${1:-unknown}"
 BINARY_PATH="${2:-}"
 
 # If no binary path given, build one
 if [ -z "$BINARY_PATH" ]; then
-    BINARY_NAME="HermesRemote_${VERSION_LABEL}.exe"
+    BINARY_NAME="PROBE_${VERSION_LABEL}.exe"
     BINARY_PATH="${REPO_DIR}/${BINARY_NAME}"
     echo "Building ${BINARY_NAME}..."
-    cd "${REPO_DIR}" && GOOS=windows GOARCH=amd64 go build -o "${BINARY_PATH}" ./cmd/hermes-remote/
+    cd "${REPO_DIR}" && GOOS=windows GOARCH=amd64 go build -o "${BINARY_PATH}" ./cmd/probe-client/
 fi
 
 BINARY_NAME=$(basename "$BINARY_PATH")
 
 echo "Uploading ${BINARY_NAME} to VPS..."
-ssh -i ${SSH_KEY} ${VPS_USER}@${VPS_IP} "mkdir -p /tmp/hermes-remote-files"
-scp -i ${SSH_KEY} "$BINARY_PATH" ${VPS_USER}@${VPS_IP}:/tmp/hermes-remote-files/${BINARY_NAME}
+ssh -i ${SSH_KEY} ${VPS_USER}@${VPS_IP} "mkdir -p /tmp/probe-files"
+scp -i ${SSH_KEY} "$BINARY_PATH" ${VPS_USER}@${VPS_IP}:/tmp/probe-files/${BINARY_NAME}
 
 echo "Triggering agent update..."
 # Use --max-time 180 to allow for download + process swap
 # The HTTP response may timeout (agent connection drops during swap) — that's OK
 curl -s --max-time 180 -X POST "http://${VPS_IP}:80/api/agent/${AGENT_ID}/update" \
     -H "Content-Type: application/json" \
-    -d "{\"binary_path\":\"/tmp/hermes-remote-files/${BINARY_NAME}\",\"version\":\"${VERSION_LABEL}\",\"download_host\":\"${VPS_IP}:80\"}" \
+    -d "{\"binary_path\":\"/tmp/probe-files/${BINARY_NAME}\",\"version\":\"${VERSION_LABEL}\",\"download_host\":\"${VPS_IP}:80\"}" \
     || true  # curl may timeout — the update still succeeds
 
 echo ""

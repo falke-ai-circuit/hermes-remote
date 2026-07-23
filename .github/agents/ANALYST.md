@@ -1,4 +1,4 @@
-# ANALYST.md — Agent Brief for hermes-remote
+# ANALYST.md — Agent Brief for PROBE
 
 ## Role
 Codebase analyst. Deep-dive into existing code, protocols, and dependencies.
@@ -15,7 +15,7 @@ LANE: <lane-id>
 ROLE: analyst
 TOOLS: read_file, search_files, terminal
 
-TASK: Analyze <component> in hermes-remote.
+TASK: Analyze <component> in PROBE.
 
 CRITICAL QUESTIONS (answer with evidence — file paths + line numbers):
 1. What is the current implementation? (files, functions, data flow)

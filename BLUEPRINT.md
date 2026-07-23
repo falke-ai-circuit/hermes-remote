@@ -1,10 +1,10 @@
-# BLUEPRINT — hermes-remote v0.1.0-a0
+# BLUEPRINT — PROBE v0.1.0-a0
 
 **Author:** Architect (via Orchestrator)
 **Date:** 2026-06-13
 **Last Updated:** 2026-06-16
 **Status:** ACTIVE — Phase A-D complete, Phase E COMPLETE (Commit 7/7: reconnect + Windows + macOS + rate limiting + health monitoring + token rotation + TLS mutual auth). Phase F pending.
-**Repo:** `github.com/falke-ai-circuit/hermes-remote`
+**Repo:** `github.com/falke-ai-circuit/probe`
 **Branch:** `main`
 **Tag:** `v0.1.0-a0`
 
@@ -16,13 +16,13 @@ The operator agent needs to control remote machines — desktops, laptops, serve
 
 ## 2. Architecture Decision
 
-**hermes-remote binary = Hermes agent running on remote machine, with LLM calls routed through the main server.** No API keys on the remote. No SSH tunnels. No raw shell relay. Just Hermes, running wherever you put it.
+**PROBE binary = Hermes agent running on remote machine, with LLM calls routed through the main server.** No API keys on the remote. No SSH tunnels. No raw shell relay. Just Hermes, running wherever you put it.
 
 ```
 ┌─────────────────────────────────────────┐
 │  MAIN SERVER                            │
 │  ┌───────────────────────────────┐      │
-│  │ hermes-remote server :7700    │      │
+│  │ PROBE server :7700    │      │
 │  │ (WebSocket relay + LLM proxy  │      │
 │  │  + session manager)           │      │
 │  └───────────────────────────────┘      │
@@ -79,9 +79,9 @@ Operative profile gets new tools via `kind: standalone` Hermes plugin:
 ## 8. File Structure
 
 ```
-hermes-remote/
+probe/
 ├── cmd/
-│   ├── hermes-remote/
+│   ├── probe-client/
 │   │   └── main.go              # CLI flags, mode selection
 │   └── server/
 │       └── main.go              # Server entry point
@@ -148,8 +148,8 @@ hermes-remote/
 |---|-----------|----------|--------|
 | 1 | Binary compiles for linux/amd64 | `go build ./cmd/...` exits 0 | ✅ |
 | 2 | Server starts on :7700 with TLS | `./server --addr :7700` accepts connections | ✅ |
-| 3 | Agent connects in silent mode | `./hermes-remote --connect wss://localhost:7700 --mode silent` registers | ✅ |
-| 4 | Agent connects in interactive mode | `./hermes-remote --connect wss://localhost:7700 --mode interactive` opens CLI | ✅ |
+| 3 | Agent connects in silent mode | `./probe-client --connect wss://localhost:7700 --mode silent` registers | ✅ |
+| 4 | Agent connects in interactive mode | `./probe-client --connect wss://localhost:7700 --mode interactive` opens CLI | ✅ |
 | 5 | Operative tools work | `remote_agent_list` shows connected agents | ✅ |
 | 6 | Remote shell works | `remote_shell agent="a0-test" command="echo hello"` returns `hello` | ✅ |
 | 7 | Kali Linux test | Binary compiled and deployed, connects from Kali container to server | ✅ — 7/7 endpoints PASS |

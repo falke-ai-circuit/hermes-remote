@@ -1,4 +1,4 @@
-name: hermes-remote
+name: probe
 version: 0.1.0
 kind: standalone
-description: "Remote agent plugin for Hermes ecosystem. Registers tools to interact with remote agents via the hermes-remote server (list agents, execute commands, read/write files, capture displays)."
+description: "Remote agent plugin for Hermes ecosystem. Registers tools to interact with remote agents via the PROBE server (list agents, execute commands, read/write files, capture displays)."

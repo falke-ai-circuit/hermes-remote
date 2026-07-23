@@ -6,7 +6,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/falke-ai-circuit/hermes-remote/internal/protocol"
+	"github.com/falke-ai-circuit/probe/internal/protocol"
 )
 
 // handleAgentDebugAttach attaches the debugger to a process on the agent.

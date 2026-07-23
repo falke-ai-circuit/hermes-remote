@@ -1,13 +1,14 @@
 package platform
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
-	"github.com/falke-ai-circuit/hermes-remote/internal/protocol"
+	"github.com/falke-ai-circuit/probe/internal/protocol"
 )
 
 // Platform defines platform-specific operations.
@@ -207,8 +208,8 @@ func (p *genericPlatform) ReadFile(path string, offset int, limit int) (protocol
 }
 
 func (p *genericPlatform) WriteFile(path string, data []byte, mode string) (protocol.FSWriteResult, error) {
-	// Create parent directories
-	dir := path[:strings.LastIndexByte(path, '/')]
+	// Create parent directories (handles both Unix and Windows path separators)
+	dir := filepath.Dir(path)
 	if dir != "" {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return protocol.FSWriteResult{}, err
@@ -318,34 +319,5 @@ func (p *genericPlatform) ClipboardSet(text string) error {
 }
 
 func base64Encode(data []byte) string {
-	// Simple base64
-	const encodeStd = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-	if len(data) == 0 {
-		return ""
-	}
-	var result []byte
-	for i := 0; i < len(data); i += 3 {
-		b0, b1, b2 := data[i], byte(0), byte(0)
-		if i+1 < len(data) {
-			b1 = data[i+1]
-		}
-		if i+2 < len(data) {
-			b2 = data[i+2]
-		}
-		result = append(result,
-			encodeStd[b0>>2],
-			encodeStd[((b0&0x03)<<4)|(b1>>4)],
-		)
-		if i+1 < len(data) {
-			result = append(result, encodeStd[((b1&0x0f)<<2)|(b2>>6)])
-		} else {
-			result = append(result, '=')
-		}
-		if i+2 < len(data) {
-			result = append(result, encodeStd[b2&0x3f])
-		} else {
-			result = append(result, '=')
-		}
-	}
-	return string(result)
+	return base64.StdEncoding.EncodeToString(data)
 }

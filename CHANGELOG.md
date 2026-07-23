@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to hermes-remote will be documented in this file.
+All notable changes to PROBE will be documented in this file.
 
 ## [v0.1.0-a0] — 2026-06-13
 
@@ -30,7 +30,7 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 
 | # | Commit | Description |
 |---|--------|-------------|
-| 1 | `4c4340a` | feat: hermes-remote v0.1.0-a0 — remote agent for Hermes ecosystem |
+| 1 | `4c4340a` | feat: PROBE v0.1.0-a0 — remote agent for Hermes ecosystem |
 | 2 | `3ab97c9` | fix: stdlib base64, process-group timeout, /health endpoint, TLS scheme detection |
 | 3 | `dc02281` | fix: append /ws path to agent connect URL if missing |
 
@@ -40,17 +40,17 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 
 ### feat: config-file based usage + AV-friendly improvements
 
-- **Config-file based usage**: Replaced all CLI flags (`--connect`, `--token`, `--mode`, etc.) with a single `--config` flag that reads a JSON config file (default: `hermes-remote.json`). This produces a clean, unremarkable command line (`HermesRemote.exe --config hermes-remote.json`) instead of a suspicious flag-heavy invocation.
+- **Config-file based usage**: Replaced all CLI flags (`--connect`, `--token`, `--mode`, etc.) with a single `--config` flag that reads a JSON config file (default: `probe-client.json`). This produces a clean, unremarkable command line (`ProbeClient.exe --config probe-client.json`) instead of a suspicious flag-heavy invocation.
 - **Help/usage output**: Added proper `--help` output with application name, version, description, usage syntax, all config field descriptions, and an example config JSON block.
 - **Clean startup logging**: Startup logs now print to stderr as normal app messages:
-  - `Hermes Remote Assistant v0.1.0`
-  - `Config: hermes-remote.json`
+  - `PROBE Client v0.1.0`
+  - `Config: probe-client.json`
   - `Connecting to <server> as '<name>' (mode: <mode>)`
   - `Connected.` / `Disconnected, reconnecting...`
 - **Removed C2-style log lines**: Stripped all `[agent]`/`[cli]` prefixes and token-inspection logs (`token length=N first_char=X`) that looked like C2/implant output. All log lines now read as normal application diagnostics.
-- **Windows version info**: Added `cmd/hermes-remote/icon/versioninfo.json` and generated `resource.syso` so the Windows binary embeds proper version metadata (CompanyName, FileDescription, ProductName, LegalCopyright) — reduces heuristic AV flagging.
-- **`make windows` target**: Builds only the Windows exe with `-ldflags "-s -w"` (stripped symbols) and version info to `./build/HermesRemote.exe`.
-- **`.gitignore`**: Added `cmd/hermes-remote/resource.syso` (generated build artifact).
+- **Windows version info**: Added `cmd/probe-client/icon/versioninfo.json` and generated `resource.syso` so the Windows binary embeds proper version metadata (CompanyName, FileDescription, ProductName, LegalCopyright) — reduces heuristic AV flagging.
+- **`make windows` target**: Builds only the Windows exe with `-ldflags "-s -w"` (stripped symbols) and version info to `./build/ProbeClient.exe`.
+- **`.gitignore`**: Added `cmd/probe-client/resource.syso` (generated build artifact).
 - **Documentation**: Updated README.md and CLAUDE.md to reflect config-file usage.
 
 ### Phase E — Production Hardening (2026-06-16)
@@ -155,9 +155,9 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
   - Logs the rotation (old/new token lengths)
   - Returns a proper `TokenRotateResult{Rotated: true, NewToken: ...}` envelope (was `map[string]bool`)
 - **NEW agent proactive refresh**: `handleConnection` loop gains a `refreshTicker` (60s) that checks `a.tokenExpiry`; if within 5 min of expiry it sends a `TypeTokenRefresh` envelope to the server, which responds with a new `TypeTokenRotate`
-- **NEW `LoadPersistedToken(path) (string, error)`** — exported helper in the agent package; reads a persisted token from disk at startup (returns "" + nil if the file doesn't exist), used by `cmd/hermes-remote/main.go` to resume with the latest rotated token after a restart
+- **NEW `LoadPersistedToken(path) (string, error)`** — exported helper in the agent package; reads a persisted token from disk at startup (returns "" + nil if the file doesn't exist), used by `cmd/probe-client/main.go` to resume with the latest rotated token after a restart
 - **CLI flag `--token-ttl duration`** (`cmd/server/main.go`, default `24h`) — server token rotation interval; `0` disables rotation. Wired via `srv.SetTokenTTL(*tokenTTL)`. Server startup log now includes `token-ttl=...`
-- **CLI flag `--token-file string`** (`cmd/hermes-remote/main.go`, default `.hermes-remote-token`) — path to persist the auth token so rotated tokens survive reconnects; empty disables persistence. At startup, if no `--token` was given, the agent loads any persisted token from this file
+- **CLI flag `--token-file string`** (`cmd/probe-client/main.go`, default `.probe-token`) — path to persist the auth token so rotated tokens survive reconnects; empty disables persistence. At startup, if no `--token` was given, the agent loads any persisted token from this file
 - **`Config` gains `TokenFile string`** field; `Agent` gains `tokenExpiry time.Time` field (guarded by `mu`)
 - Zero new external deps (stdlib `crypto/rand`, `encoding/hex`, `os` only). Build + vet + tests pass: `go build ./cmd/...` exits 0, `go vet ./...` exits 0, `go test ./...` passes, cross-compile (darwin/linux/windows × amd64/arm64) exits 0
 - Backward compatible: existing `TypeTokenRotate` and `TokenRotateParams.NewToken` unchanged (only added optional `Expiry` field)
@@ -176,7 +176,7 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
   - **`StartTLS(certFile, keyFile)`** now builds a `tls.Config` with `MinVersion: tls.VersionTLS13`; when `clientCAFile != ""` loads the CA pool and sets `ClientAuth = RequireAndVerifyClientCert` + `ClientCAs`. Honors the server's stored `certFile`/`keyFile` (override params may be empty). Logs `starting TLS+mTLS` vs `starting TLS` accordingly
 - **`internal/agent/agent.go`**: `Config` gains `ClientCertFile`, `ClientKeyFile string` fields (client cert for mTLS on outbound `wss://`); `runOutbound()` passes them to `protocol.Dial()`
 - **`cmd/server/main.go`** — NEW flags: `--cert-file` (PEM, enables TLS with `--key-file`), `--key-file` (PEM), `--client-ca` (PEM, enables mTLS, requires cert+key). When cert+key provided: uses `NewServerWithTLSRateLimit` + `StartTLS`; else `NewServerWithRateLimit` + `Start` (unchanged behavior). Startup log distinguishes TLS / TLS+mTLS / plain
-- **`cmd/hermes-remote/main.go`** — NEW flags: `--client-cert` (PEM, mTLS outbound), `--client-key` (PEM, mTLS outbound), `--cert` (CA cert for server verification on outbound), `--cert-file`/`--key-file` (inbound server TLS cert/key). Wired into `agent.Config`
+- **`cmd/probe-client/main.go`** — NEW flags: `--client-cert` (PEM, mTLS outbound), `--client-key` (PEM, mTLS outbound), `--cert` (CA cert for server verification on outbound), `--cert-file`/`--key-file` (inbound server TLS cert/key). Wired into `agent.Config`
 - **Backward compatible**: `Dial`/`Listen`/`NewServer` signature changes are internal (callers updated in the same commit). `StartTLS` still accepts `certFile, keyFile` (now optional overrides). No existing flag removed
 - Build + vet + tests pass: `go build ./cmd/...` exits 0, `go vet ./...` exits 0, `go test ./...` passes (6/6 rate-limiter tests). Cross-compile clean for all 6 targets (linux/darwin/windows × amd64/arm64)
 
@@ -232,7 +232,7 @@ Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine
 
 | # | Commit | Description |
 |---|--------|-------------|
-| 1 | `4c4340a` | feat: hermes-remote v0.1.0-a0 — remote agent for Hermes ecosystem |
+| 1 | `4c4340a` | feat: PROBE v0.1.0-a0 — remote agent for Hermes ecosystem |
 | 2 | `3ab97c9` | fix: stdlib base64, process-group timeout, /health endpoint, TLS scheme detection |
 | 3 | `dc02281` | fix: append /ws path to agent connect URL if missing |
 | 4 | `c5dde2c` | fix: cross-platform shell + CODER rule #6 + Windows platform stubs |

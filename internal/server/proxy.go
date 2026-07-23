@@ -107,7 +107,7 @@ type LLMProxy struct {
 }
 
 // NewLLMProxy creates an LLM proxy that reads keys from environment variables.
-// Priority: HERMES_REMOTE_LLM_KEY (generic), DEEPSEEK_API_KEY, MINIMAX_API_KEY, OLLAMA_API_KEY.
+// Priority: PROBE_LLM_KEY (generic), DEEPSEEK_API_KEY, MINIMAX_API_KEY, OLLAMA_API_KEY.
 // The proxy is initialised with default rate limits: 10 req/s, burst 20, max 5 concurrent.
 // Use SetRateLimiter to override these limits (e.g. from CLI flags).
 func NewLLMProxy() *LLMProxy {
@@ -115,7 +115,7 @@ func NewLLMProxy() *LLMProxy {
 		limiter: NewRateLimiter(10.0, 20, 5), // 10 req/s, burst 20, max 5 concurrent
 	}
 
-	if key := os.Getenv("HERMES_REMOTE_LLM_KEY"); key != "" {
+	if key := os.Getenv("PROBE_LLM_KEY"); key != "" {
 		p.provider = "generic"
 		p.apiKey = key
 	} else if key := os.Getenv("DEEPSEEK_API_KEY"); key != "" {
@@ -152,7 +152,7 @@ func (p *LLMProxy) Call(agentID string, prompt string) (string, string) {
 	}
 
 	if p.apiKey == "" {
-		return fmt.Sprintf("[LLM proxy error: no API key configured. Set HERMES_REMOTE_LLM_KEY or provider-specific key.]"), p.provider
+		return fmt.Sprintf("[LLM proxy error: no API key configured. Set PROBE_LLM_KEY or provider-specific key.]"), p.provider
 	}
 
 	switch p.provider {
@@ -169,9 +169,9 @@ func (p *LLMProxy) Call(agentID string, prompt string) (string, string) {
 	}
 }
 
-// callGeneric uses the HERMES_REMOTE_LLM_KEY for a generic OpenAI-compatible endpoint.
+// callGeneric uses the PROBE_LLM_KEY for a generic OpenAI-compatible endpoint.
 func (p *LLMProxy) callGeneric(prompt string) string {
-	endpoint := os.Getenv("HERMES_REMOTE_LLM_ENDPOINT")
+	endpoint := os.Getenv("PROBE_LLM_ENDPOINT")
 	if endpoint == "" {
 		endpoint = "https://api.openai.com/v1/chat/completions"
 	}

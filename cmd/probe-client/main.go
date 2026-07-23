@@ -12,7 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/falke-ai-circuit/hermes-remote/internal/agent"
+	"github.com/falke-ai-circuit/probe/internal/agent"
+	_ "github.com/falke-ai-circuit/probe/internal/features"
+	_ "github.com/falke-ai-circuit/probe/internal/server"
 )
 
 const appVersion = "v0.1.0"
@@ -21,7 +23,7 @@ const appVersion = "v0.1.0"
 // All connection parameters are read from this file instead of
 // individual CLI flags, which keeps the command line clean and
 // unremarkable.
-var configPath = flag.String("config", "hermes-remote.json", "Path to JSON config file")
+var configPath = flag.String("config", "probe-client.json", "Path to JSON config file")
 
 // ConfigFile is the JSON structure for the config file.
 type ConfigFile struct {
@@ -45,27 +47,27 @@ type ConfigFile struct {
 
 // printUsage writes a clean help/usage banner to stderr.
 func printUsage() {
-	fmt.Fprintf(os.Stderr, `Hermes Remote Assistant %s
+	fmt.Fprintf(os.Stderr, `PROBE Client %s
 A remote assistant tool for the Hermes AI ecosystem
 
 Usage:
-  HermesRemote.exe [--config hermes-remote.json]
+  ProbeClient.exe [--config probe-client.json]
 
 Configuration:
-  All settings are read from a JSON config file (default: hermes-remote.json).
+  All settings are read from a JSON config file (default: probe-client.json).
   Use --config <path> to specify an alternate file.
 
 Config file fields:
 
   server       string  WebSocket server URL (e.g. "ws://host:7700" or "wss://host:7700")
   token        string  Authentication token for the server
-  name         string  Display name for this agent (default: "hermes-remote")
+  name         string  Display name for this agent (default: "probe-client")
   mode         string  "silent" (daemon) or "interactive" (CLI prompt) (default: "silent")
   listen       string  Address to listen on for inbound connections (e.g. ":7700")
   maxRetries   int     Max reconnect attempts; 0 = infinite (default: 0)
   backoffMin   string  Min reconnect backoff duration (e.g. "1s") (default: "1s")
   backoffMax   string  Max reconnect backoff duration (e.g. "60s") (default: "60s")
-  tokenFile    string  Path to persist rotated auth token (default: ".hermes-remote-token")
+  tokenFile    string  Path to persist rotated auth token (default: ".probe-token")
   cert         string  CA certificate file (PEM) for verifying server TLS on wss://
   clientCert   string  Client certificate file (PEM) for mTLS on outbound wss://
   clientKey    string  Client key file (PEM) for mTLS on outbound wss://
@@ -82,7 +84,7 @@ Config file fields:
   sandbox_dir  string  Restrict all filesystem operations to this directory (empty = no restriction)
                          In "sandboxed" mode, if empty, auto-uses the agent's startup directory
 
-Example config (hermes-remote.json):
+Example config (probe-client.json):
 
   {
     "server": "ws://your-server:7700",
@@ -133,7 +135,7 @@ func main() {
 
 	name := fcfg.Name
 	if name == "" {
-		name = "hermes-remote"
+		name = "probe-client"
 	}
 
 	// Parse backoff durations
@@ -148,7 +150,7 @@ func main() {
 
 	tokenFile := fcfg.TokenFile
 	if tokenFile == "" {
-		tokenFile = ".hermes-remote-token"
+		tokenFile = ".probe-token"
 	}
 
 	// If no token in config, try to resume with a previously persisted token
@@ -190,7 +192,7 @@ func main() {
 	}
 
 	// Startup logging
-	fmt.Fprintf(os.Stderr, "Hermes Remote Assistant %s\n", appVersion)
+	fmt.Fprintf(os.Stderr, "PROBE Client %s\n", appVersion)
 	fmt.Fprintf(os.Stderr, "Config: %s\n", *configPath)
 
 	ag := agent.New(cfg)
@@ -218,7 +220,7 @@ func main() {
 	}
 
 	<-sigCh
-	log.Println("Hermes Remote Assistant shutting down...")
+	log.Println("PROBE Client shutting down...")
 }
 
 func runInteractive(ag *agent.Agent) {

@@ -1,11 +1,11 @@
 {
-  "project": "hermes-remote",
+  "project": "probe",
   "version": "v0.1.0-a0",
   "last_updated": "2026-06-16T23:50:00Z",
   "hot_cache": [
     {
       "key": "module_path",
-      "value": "github.com/falke-ai-circuit/hermes-remote",
+      "value": "github.com/falke-ai-circuit/probe",
       "note": "All Go files must import this path. The old falke-remote path was from the initial scaffold."
     },
     {
@@ -21,7 +21,7 @@
     {
       "key": "build_command",
       "value": "make build",
-      "note": "Builds both binaries: cmd/hermes-remote/ and cmd/server/"
+      "note": "Builds both binaries: cmd/probe-client/ and cmd/server/"
     },
     {
       "key": "cross_compile",
@@ -31,7 +31,7 @@
     {
       "key": "server_port",
       "value": "7700",
-      "note": "Default WebSocket server port, configurable via --addr flag or HERMES_REMOTE_ADDR env"
+      "note": "Default WebSocket server port, configurable via --addr flag or PROBE_ADDR env"
     },
     {
       "key": "token",
@@ -115,7 +115,7 @@
     }
   ],
   "architecture": {
-    "cmd/hermes-remote": {
+    "cmd/probe-client": {
       "purpose": "Agent binary — CLI entry point",
       "depends_on": ["internal/agent", "internal/protocol", "internal/platform"],
       "key_files": ["main.go"],
@@ -159,7 +159,7 @@
   "gotchas": [
     {
       "id": "HR-001",
-      "rule": "Module path is github.com/falke-ai-circuit/hermes-remote",
+      "rule": "Module path is github.com/falke-ai-circuit/probe",
       "detail": "The initial scaffold used 'falke-remote'. All imports must use the full GitHub path. go.mod was fixed in commit 3ab97c9.",
       "affected": ["go.mod", "ALL *.go files"]
     },
@@ -179,7 +179,7 @@
       "id": "HR-004",
       "rule": "Agent connect URL must include /ws path",
       "detail": "Fixed in commit dc02281. If the user provides a URL without /ws (e.g., wss://host:7700), the agent appends /ws automatically. The server's WebSocket upgrade handler is at /ws.",
-      "affected": ["cmd/hermes-remote/main.go", "internal/agent/agent.go"]
+      "affected": ["cmd/probe-client/main.go", "internal/agent/agent.go"]
     },
     {
       "id": "HR-005",
@@ -265,7 +265,7 @@
         "internal/server/server.go",
         "internal/agent/agent.go",
         "cmd/server/main.go",
-        "cmd/hermes-remote/main.go",
+        "cmd/probe-client/main.go",
         "CHANGELOG.md",
         "ROADMAP.md",
         "project_knowledge.json",
@@ -281,7 +281,7 @@
         "internal/protocol/messages.go",
         "internal/agent/agent.go",
         "cmd/server/main.go",
-        "cmd/hermes-remote/main.go",
+        "cmd/probe-client/main.go",
         "CHANGELOG.md",
         "ROADMAP.md",
         "BLUEPRINT.md"
@@ -347,7 +347,7 @@
       "summary": "Phase E Commit 1: Reconnect Hardening — replaced fixed 5s backoff with exponential backoff + jitter. Added Config fields (MaxRetries, BackoffMin, BackoffMax), computeBackoff() method, CLI flags (--max-retries, --backoff-min, --backoff-max). Build and vet pass cleanly.",
       "files": [
         "internal/agent/agent.go",
-        "cmd/hermes-remote/main.go",
+        "cmd/probe-client/main.go",
         "CHANGELOG.md",
         "ROADMAP.md",
         "project_knowledge.json",
@@ -378,7 +378,7 @@
         "internal/protocol/websocket.go",
         "internal/agent/agent.go",
         "internal/server/server.go",
-        "cmd/hermes-remote/main.go",
+        "cmd/probe-client/main.go",
         "tool/plugin.py"
       ]
     },

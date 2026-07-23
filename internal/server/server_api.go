@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/falke-ai-circuit/hermes-remote/internal/protocol"
+	"github.com/falke-ai-circuit/probe/internal/protocol"
 )
 
 // handleAgentRoute dispatches /api/agent/{id}/... routes.
@@ -427,6 +427,11 @@ func (s *Server) forwardToAgentWithTimeout(agentID string, msgType string, param
 		ID:     reqID,
 		Type:   msgType,
 		Params: paramData,
+		// Bypass is intentionally never set by the server-side forwarder.
+		// API callers cannot escalate to bypass mode — the server must
+		// explicitly set bypass=true only after server-side authorization
+		// logic (which does not exist yet). This prevents any client-supplied
+		// bypass flag from reaching the agent.
 	}
 
 	respCh := make(chan protocol.Envelope, 1)

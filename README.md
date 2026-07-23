@@ -1,4 +1,4 @@
-# hermes-remote
+# PROBE
 
 Remote agent for the Hermes ecosystem. Run Hermes natively on any remote machine using the main server's LLM infrastructure.
 
@@ -11,8 +11,8 @@ make build
 # Start server (on main Hermes host)
 ./cmd/server/server --addr :7700 --token "hermes.circuit.remote.2026"
 
-# Create a config file on the remote machine (hermes-remote.json):
-cat > hermes-remote.json << 'EOF'
+# Create a config file on the remote machine (probe-client.json):
+cat > probe-client.json << 'EOF'
 {
   "server": "ws://your-server:7700",
   "token": "your-auth-token",
@@ -25,20 +25,20 @@ cat > hermes-remote.json << 'EOF'
 EOF
 
 # Run the agent with the config file
-./cmd/hermes-remote/hermes-remote --config hermes-remote.json
+./cmd/probe-client/probe-client --config probe-client.json
 
-# Or use the default config path (hermes-remote.json in the current directory)
-./cmd/hermes-remote/hermes-remote
+# Or use the default config path (probe-client.json in the current directory)
+./cmd/probe-client/probe-client
 ```
 
 ## Usage
 
 ```
-Hermes Remote Assistant v0.1.0
+PROBE Client v0.1.0
 A remote assistant tool for the Hermes AI ecosystem
 
 Usage:
-  HermesRemote.exe [--config hermes-remote.json]
+  ProbeClient.exe [--config probe-client.json]
 ```
 
 All connection settings are read from a JSON config file. Run with `--help` to see
@@ -48,13 +48,13 @@ all available config fields and an example config.
 
 - **server** — WebSocket server URL (`ws://` or `wss://`)
 - **token** — Authentication token
-- **name** — Display name for this agent (default: `hermes-remote`)
+- **name** — Display name for this agent (default: `probe-client`)
 - **mode** — `silent` (daemon) or `interactive` (CLI prompt) (default: `silent`)
 - **listen** — Address for inbound connections (e.g. `:7700`)
 - **maxRetries** — Max reconnect attempts; `0` = infinite (default: `0`)
 - **backoffMin** — Min reconnect backoff (default: `1s`)
 - **backoffMax** — Max reconnect backoff (default: `60s`)
-- **tokenFile** — Path to persist rotated token (default: `.hermes-remote-token`)
+- **tokenFile** — Path to persist rotated token (default: `.probe-token`)
 - **cert** — CA certificate (PEM) for verifying server TLS on `wss://`
 - **clientCert** — Client certificate (PEM) for mTLS
 - **clientKey** — Client key (PEM) for mTLS

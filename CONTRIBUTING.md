@@ -1,4 +1,4 @@
-# Contributing to hermes-remote
+# Contributing to PROBE
 
 ## Commit Conventions
 
@@ -34,8 +34,8 @@ chore:    Build process, tooling, CI
 
 ```bash
 # Clone
-git clone https://github.com/falke-ai-circuit/hermes-remote.git
-cd hermes-remote
+git clone https://github.com/falke-ai-circuit/probe.git
+cd PROBE
 
 # Build
 make build
@@ -50,9 +50,9 @@ make cross
 ## Project Structure
 
 ```
-hermes-remote/
+probe/
 ├── cmd/
-│   ├── hermes-remote/    # Agent binary
+│   ├── probe-client/    # Agent binary
 │   └── server/           # Server binary
 ├── internal/
 │   ├── agent/            # Agent loop, connection management

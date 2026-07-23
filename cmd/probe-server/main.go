@@ -7,13 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/falke-ai-circuit/hermes-remote/internal/server"
+	"github.com/falke-ai-circuit/probe/internal/server"
 )
 
 func main() {
-	addr := flag.String("addr", "", "listen address (default: HERMES_REMOTE_ADDR env or localhost:7700)")
-	token := flag.String("token", "", "auth token (default: HERMES_REMOTE_TOKEN env)")
-	registryPath := flag.String("registry", "", "registry file path (default: HERMES_REMOTE_REGISTRY env or /tmp/hermes-remote-registry.json)")
+	addr := flag.String("addr", "", "listen address (default: PROBE_ADDR env or localhost:7700)")
+	token := flag.String("token", "", "auth token (default: PROBE_TOKEN env)")
+	registryPath := flag.String("registry", "", "registry file path (default: PROBE_REGISTRY env or /tmp/probe-registry.json)")
 	rateLimit := flag.Float64("rate-limit", 10.0, "LLM proxy rate limit: requests per second per agent (default 10)")
 	rateBurst := flag.Int("rate-burst", 20, "LLM proxy burst size: max tokens accumulated per agent (default 20)")
 	maxConcurrent := flag.Int("max-concurrent", 5, "LLM proxy max concurrent in-flight requests across all agents (default 5)")
@@ -28,22 +28,22 @@ func main() {
 
 	// Env vars as fallback
 	if *addr == "" {
-		*addr = os.Getenv("HERMES_REMOTE_ADDR")
+		*addr = os.Getenv("PROBE_ADDR")
 	}
 	if *addr == "" {
 		*addr = "localhost:7700"
 	}
 	if *token == "" {
-		*token = os.Getenv("HERMES_REMOTE_TOKEN")
+		*token = os.Getenv("PROBE_TOKEN")
 	}
 	if *registryPath == "" {
-		*registryPath = os.Getenv("HERMES_REMOTE_REGISTRY")
+		*registryPath = os.Getenv("PROBE_REGISTRY")
 	}
 	if *registryPath == "" {
-		*registryPath = "/tmp/hermes-remote-registry.json"
+		*registryPath = "/tmp/probe-registry.json"
 	}
 	if *extraTokens == "" {
-		*extraTokens = os.Getenv("HERMES_REMOTE_EXTRA_TOKENS")
+		*extraTokens = os.Getenv("PROBE_EXTRA_TOKENS")
 	}
 
 	rlCfg := server.RateLimitConfig{
@@ -56,11 +56,11 @@ func main() {
 	// client CA is also provided, enable TLS mutual authentication (mTLS).
 	useTLS := *certFile != "" && *keyFile != ""
 	if useTLS && *clientCA != "" {
-		log.Printf("Starting hermes-remote server with TLS+mTLS on %s (rate-limit=%.1f req/s, burst=%d, max-concurrent=%d, token-ttl=%v, client-ca=%s)", *addr, *rateLimit, *rateBurst, *maxConcurrent, *tokenTTL, *clientCA)
+		log.Printf("Starting PROBE server with TLS+mTLS on %s (rate-limit=%.1f req/s, burst=%d, max-concurrent=%d, token-ttl=%v, client-ca=%s)", *addr, *rateLimit, *rateBurst, *maxConcurrent, *tokenTTL, *clientCA)
 	} else if useTLS {
-		log.Printf("Starting hermes-remote server with TLS on %s (rate-limit=%.1f req/s, burst=%d, max-concurrent=%d, token-ttl=%v)", *addr, *rateLimit, *rateBurst, *maxConcurrent, *tokenTTL)
+		log.Printf("Starting PROBE server with TLS on %s (rate-limit=%.1f req/s, burst=%d, max-concurrent=%d, token-ttl=%v)", *addr, *rateLimit, *rateBurst, *maxConcurrent, *tokenTTL)
 	} else {
-		log.Printf("Starting hermes-remote server on %s (rate-limit=%.1f req/s, burst=%d, max-concurrent=%d, token-ttl=%v)", *addr, *rateLimit, *rateBurst, *maxConcurrent, *tokenTTL)
+		log.Printf("Starting PROBE server on %s (rate-limit=%.1f req/s, burst=%d, max-concurrent=%d, token-ttl=%v)", *addr, *rateLimit, *rateBurst, *maxConcurrent, *tokenTTL)
 	}
 
 	var srv *server.Server

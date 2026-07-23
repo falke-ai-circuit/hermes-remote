@@ -1,4 +1,4 @@
-# ARCHITECT.md — Agent Brief for hermes-remote
+# ARCHITECT.md — Agent Brief for PROBE
 
 ## Role
 System architect. Design component blueprints, commit sequences, and API specs.
@@ -15,7 +15,7 @@ LANE: <lane-id>
 ROLE: architect
 TOOLS: read_file, search_files, terminal
 
-TASK: Design <feature/component> for hermes-remote.
+TASK: Design <feature/component> for PROBE.
 
 INPUT:
 - Analyst's audit: <path>

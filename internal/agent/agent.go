@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/falke-ai-circuit/hermes-remote/internal/platform"
-	"github.com/falke-ai-circuit/hermes-remote/internal/protocol"
+	"github.com/falke-ai-circuit/probe/internal/platform"
+	"github.com/falke-ai-circuit/probe/internal/protocol"
 	"github.com/gorilla/websocket"
 )
 

@@ -1,4 +1,4 @@
-# REVIEWER.md — Agent Brief for hermes-remote
+# REVIEWER.md — Agent Brief for PROBE
 
 ## Role
 Quality gate. Verify every deliverable against its brief with real evidence.
@@ -15,7 +15,7 @@ LANE: <lane-id>
 ROLE: reviewer
 TOOLS: terminal, read_file, search_files
 
-TASK: Review <deliverable> for hermes-remote.
+TASK: Review <deliverable> for PROBE.
 
 INPUT:
 - Coder's commit SHA: <sha>

@@ -9,12 +9,12 @@
             "charset_id": 1252,
             "string_version_info": {
                 "CompanyName": "Falke AI Circuit",
-                "FileDescription": "Hermes Remote Assistant",
+                "FileDescription": "PROBE Client",
                 "FileVersion": "0.1.0",
-                "InternalName": "HermesRemote",
+                "InternalName": "PROBE",
                 "LegalCopyright": "© 2026 Falke AI Circuit. MIT License.",
-                "OriginalFilename": "HermesRemote.exe",
-                "ProductName": "Hermes Remote Assistant",
+                "OriginalFilename": "ProbeClient.exe",
+                "ProductName": "PROBE Client",
                 "ProductVersion": "0.1.0"
             }
         }
