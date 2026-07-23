@@ -2,12 +2,18 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/falke-ai-circuit/probe/internal/server"
+)
+
+const (
+	appVersion = "v1.1.0"
+	appName    = "PROBE Server"
 )
 
 func main() {
@@ -33,7 +39,13 @@ func main() {
 	adminPassword := flag.String("admin-password", "", "password for the default admin operator created on startup if no operators exist")
 	operatorPath := flag.String("operator-db", "", "operator database file path (default: PROBE_OPERATOR_DB env or /tmp/probe-operators.json)")
 	vtAPIKey := flag.String("vt-api-key", "", "VirusTotal API key for auto-scan after build and manual scan API (default: PROBE_VT_API_KEY env)")
+	showVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("%s %s\n", appName, appVersion)
+		os.Exit(0)
+	}
 
 	// Env vars as fallback
 	if *addr == "" {
@@ -108,7 +120,7 @@ func main() {
 	} else if useTLS {
 		log.Printf("Starting PROBE server with TLS on %s (rate-limit=%.1f req/s, burst=%d, max-concurrent=%d, token-ttl=%v)", *addr, *rateLimit, *rateBurst, *maxConcurrent, *tokenTTL)
 	} else {
-		log.Printf("Starting PROBE server on %s (rate-limit=%.1f req/s, burst=%d, max-concurrent=%d, token-ttl=%v)", *addr, *rateLimit, *rateBurst, *maxConcurrent, *tokenTTL)
+		log.Printf("Starting PROBE server %s on %s (rate-limit=%.1f req/s, burst=%d, max-concurrent=%d, token-ttl=%v)", appVersion, *addr, *rateLimit, *rateBurst, *maxConcurrent, *tokenTTL)
 	}
 
 	var srv *server.Server
