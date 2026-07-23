@@ -303,6 +303,12 @@ func (s *Server) registerV1Routes() {
 	s.mux.HandleFunc("POST /api/v1/profiles", s.handleV1CreateProfile)
 	s.mux.HandleFunc("GET /api/v1/profiles/{id}", s.handleV1GetProfile)
 	s.mux.HandleFunc("DELETE /api/v1/profiles/{id}", s.handleV1DeleteProfile)
+
+	// Task scheduler (Phase 5)
+	s.mux.HandleFunc("POST /api/v1/tasks", s.handleV1CreateTask)
+	s.mux.HandleFunc("GET /api/v1/tasks", s.handleV1ListTasks)
+	s.mux.HandleFunc("GET /api/v1/tasks/{id}", s.handleV1GetTask)
+	s.mux.HandleFunc("DELETE /api/v1/tasks/{id}", s.handleV1CancelTask)
 }
 
 // ---------------------------------------------------------------------------

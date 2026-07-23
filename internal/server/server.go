@@ -94,6 +94,9 @@ type Server struct {
 
 	// Build profiles: reusable build configuration templates.
 	profiles *ProfileManager
+
+	// Task scheduler: delayed, recurring, and offline-queued tasks.
+	tasks *TaskManager
 }
 
 // startTime records when the server process began, used by /health for uptime.
@@ -125,6 +128,7 @@ func NewServer(addr string, token string, registryPath string) *Server {
 		revokedAgents: NewRevokedAgents(),
 		builder:       NewBuilderManager("", ""),
 		profiles:      NewProfileManager(""),
+		tasks:         NewTaskManager("", nil),
 	}
 }
 
@@ -206,6 +210,9 @@ func (s *Server) Start() error {
 	// Start proactive token rotation if a TTL was configured.
 	s.StartTokenRotation()
 
+	// Start the task scheduler background goroutine.
+	s.tasks.Start()
+
 	log.Printf("[server] starting on %s", s.addr)
 	return s.srv.ListenAndServe()
 }
@@ -252,6 +259,9 @@ func (s *Server) StartTLS(certFile, keyFile string) error {
 	// Start proactive token rotation if a TTL is configured.
 	s.StartTokenRotation()
 
+	// Start the task scheduler background goroutine.
+	s.tasks.Start()
+
 	mode := "TLS"
 	if s.clientCAFile != "" {
 		mode = "TLS+mTLS"
@@ -275,6 +285,8 @@ func (s *Server) Close() error {
 	// Stop the token rotation goroutine and wait for it to drain.
 	close(s.tokenStop)
 	s.tokenWG.Wait()
+	// Stop the task scheduler background goroutine.
+	s.tasks.Stop()
 	if s.srv != nil {
 		return s.srv.Close()
 	}
@@ -322,6 +334,14 @@ func (s *Server) SetBuilderPath(path, outputDir string) {
 // called before Start/StartTLS.
 func (s *Server) SetProfilesPath(path string) {
 	s.profiles = NewProfileManager(path)
+}
+
+// SetTasksPath configures persistent task storage. When set, scheduled tasks
+// are loaded from / persisted to the given file path and the background
+// scheduler goroutine forwards pending tasks to connected agents. Must be
+// called before Start/StartTLS.
+func (s *Server) SetTasksPath(path string) {
+	s.tasks = NewTaskManager(path, s)
 }
 
 // operatorContextKey is the context key used to store the authenticated
