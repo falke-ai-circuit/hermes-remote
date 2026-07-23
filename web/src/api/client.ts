@@ -103,7 +103,7 @@ export const api = {
       body: JSON.stringify({ path }),
     }),
   procList: (id: string) =>
-    apiFetch<unknown>(`/agents/${id}/proc-list`, { method: 'POST' }),
+    apiFetch<unknown>(`/agents/${id}/proc-list`, { method: 'POST', body: '{}' }),
   procKill: (id: string, pid: number) =>
     apiFetch<unknown>(`/agents/${id}/proc-kill`, {
       method: 'POST',
@@ -115,7 +115,7 @@ export const api = {
       body: JSON.stringify({ executable: exe, args: args || '' }),
     }),
   capture: (id: string) =>
-    apiFetch<unknown>(`/agents/${id}/capture`, { method: 'POST' }),
+    apiFetch<unknown>(`/agents/${id}/capture`, { method: 'POST', body: '{}' }),
   tunnelOpen: (id: string, port: number, target: string) =>
     apiFetch<unknown>(`/agents/${id}/tunnel`, {
       method: 'POST',
@@ -132,23 +132,23 @@ export const api = {
       body: JSON.stringify({ target_address: target, target_port: port }),
     }),
   mitmStop: (id: string) =>
-    apiFetch<unknown>(`/agents/${id}/mitm-stop`, { method: 'POST' }),
+    apiFetch<unknown>(`/agents/${id}/mitm-stop`, { method: 'POST', body: '{}' }),
   mitmTraffic: (id: string) =>
-    apiFetch<unknown>(`/agents/${id}/mitm-traffic`, { method: 'POST' }),
+    apiFetch<unknown>(`/agents/${id}/mitm-traffic`, { method: 'POST', body: '{}' }),
   debugAttach: (id: string, pid: number) =>
     apiFetch<unknown>(`/agents/${id}/debug-attach`, {
       method: 'POST',
       body: JSON.stringify({ pid }),
     }),
   debugDetach: (id: string) =>
-    apiFetch<unknown>(`/agents/${id}/debug-detach`, { method: 'POST' }),
+    apiFetch<unknown>(`/agents/${id}/debug-detach`, { method: 'POST', body: '{}' }),
   debugReadMem: (id: string, addr: string, size: number) =>
     apiFetch<unknown>(`/agents/${id}/debug-read-mem`, {
       method: 'POST',
       body: JSON.stringify({ address: addr, size }),
     }),
   debugModules: (id: string) =>
-    apiFetch<unknown>(`/agents/${id}/debug-modules`, { method: 'POST' }),
+    apiFetch<unknown>(`/agents/${id}/debug-modules`, { method: 'POST', body: '{}' }),
 
   // Builds
   listBuilds: () => apiFetch<BuildConfig[]>('/builds'),
@@ -238,7 +238,7 @@ export const api = {
 
   // VirusTotal scan
   triggerVTScan: (buildId: string) =>
-    apiFetch<{ status: string; message?: string }>(`/builds/${buildId}/vt-scan`, { method: 'POST' }),
+    apiFetch<{ status: string; message?: string }>(`/builds/${buildId}/vt-scan`, { method: 'POST', body: '{}' }),
   getVTScan: (buildId: string) =>
     apiFetch<{ vt_status: string; detections: number; total: number; report_url: string }>(`/builds/${buildId}/vt-scan`),
 }
