@@ -13,7 +13,6 @@ export default function Login() {
     setLoading(true)
     try {
       await login(username, password)
-      // Reload to show the main app with the token set.
       window.location.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
@@ -25,7 +24,10 @@ export default function Login() {
   return (
     <div className="login-container">
       <div className="login-card">
-        <div className="login-logo">PROBE</div>
+        <div className="login-logo">⬢ PROBE</div>
+        <div style={{ textAlign: 'center', marginBottom: 24, fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1 }}>
+          PLATFORM FOR REMOTE OPERATIONS & BRIDGE ENVIRONMENT
+        </div>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label htmlFor="username">Username</label>
@@ -52,7 +54,7 @@ export default function Login() {
           </div>
           {error && <div className="error-msg">{error}</div>}
           <button type="submit" className="btn btn-primary login-btn" disabled={loading}>
-            {loading ? 'Signing in...' : 'Sign in'}
+            {loading ? 'Authenticating…' : '⏻ Sign In'}
           </button>
         </form>
       </div>

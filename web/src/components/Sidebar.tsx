@@ -3,10 +3,10 @@ import { clearToken } from '../api/client'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: '◉' },
-  { to: '/agents', label: 'Agents', icon: '🖥' },
-  { to: '/builds', label: 'Builder', icon: '🔧' },
-  { to: '/profiles', label: 'Profiles', icon: '📋' },
-  { to: '/tasks', label: 'Tasks', icon: '⏰' },
+  { to: '/agents', label: 'Agents', icon: '◈' },
+  { to: '/builds', label: 'Builder', icon: '⬡' },
+  { to: '/profiles', label: 'Profiles', icon: '▤' },
+  { to: '/tasks', label: 'Tasks', icon: '◷' },
   { to: '/settings', label: 'Settings', icon: '⚙' },
 ]
 
@@ -18,7 +18,7 @@ export default function Sidebar() {
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-logo">PROBE</div>
+      <div className="sidebar-logo">⬢ PROBE</div>
       <nav className="sidebar-nav">
         {navItems.map((item) => (
           <NavLink

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import type { HealthInfo, AgentRecord, Task } from '../api/types'
+import { StatusBadge } from '../components/StatusBadge'
 
 export default function Dashboard() {
   const [health, setHealth] = useState<HealthInfo | null>(null)
@@ -89,7 +90,7 @@ export default function Dashboard() {
               </thead>
               <tbody>
                 {agents.map(a => (
-                  <tr key={a.agent_id} className="clickable" onClick={() => window.location.href = `/agents/${a.agent_id}`}>
+                  <tr key={a.agent_id} className="clickable" onClick={() => window.location.hash = `/agents/${a.agent_id}`}>
                     <td>
                       <Link to={`/agents/${a.agent_id}`}>{a.name || a.agent_id}</Link>
                     </td>
@@ -140,14 +141,6 @@ export default function Dashboard() {
       </div>
     </div>
   )
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const cls = status === 'active' || status === 'completed' ? 'badge-green'
-    : status === 'stale' || status === 'pending' || status === 'queued' ? 'badge-yellow'
-    : status === 'error' || status === 'failed' || status === 'cancelled' ? 'badge-red'
-    : 'badge-gray'
-  return <span className={`badge ${cls}`}>{status}</span>
 }
 
 function formatUptime(seconds: number): string {

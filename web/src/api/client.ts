@@ -226,4 +226,19 @@ export const api = {
     const q = params.toString()
     return apiFetch<AuditEntry[]>(`/audit${q ? '?' + q : ''}`)
   },
+
+  // Agent capabilities + redeploy
+  getAgentCapabilities: (id: string) =>
+    apiFetch<{ capabilities: string[] }>(`/agents/${id}/capabilities`),
+  redeployAgent: (id: string, capabilities: string[], serverUrl?: string) =>
+    apiFetch<{ build_id: string; status: string }>(`/agents/${id}/redeploy`, {
+      method: 'POST',
+      body: JSON.stringify({ capabilities, server_url: serverUrl }),
+    }),
+
+  // VirusTotal scan
+  triggerVTScan: (buildId: string) =>
+    apiFetch<{ status: string; message?: string }>(`/builds/${buildId}/vt-scan`, { method: 'POST' }),
+  getVTScan: (buildId: string) =>
+    apiFetch<{ vt_status: string; detections: number; total: number; report_url: string }>(`/builds/${buildId}/vt-scan`),
 }

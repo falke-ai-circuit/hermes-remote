@@ -11,8 +11,17 @@ import { MITMTab } from '../components/agent/MITMTab'
 import { DebugTab } from '../components/agent/DebugTab'
 import { ScreenTab } from '../components/agent/ScreenTab'
 
-const tabs = ['Terminal', 'Files', 'Processes', 'Tunnels', 'MITM', 'Debug', 'Screen', 'Audit'] as const
-type TabName = typeof tabs[number]
+const tabs = [
+  { name: 'Terminal', icon: '>' },
+  { name: 'Files', icon: '📁' },
+  { name: 'Processes', icon: '⚙' },
+  { name: 'Tunnels', icon: '⇄' },
+  { name: 'MITM', icon: '◢' },
+  { name: 'Debug', icon: '🐛' },
+  { name: 'Screen', icon: '⛶' },
+  { name: 'Audit', icon: '✦' },
+] as const
+type TabName = typeof tabs[number]['name']
 
 export default function AgentDetail() {
   const { id } = useParams<{ id: string }>()
@@ -45,103 +54,109 @@ export default function AgentDetail() {
   if (!agent) return <div className="loading">Loading agent…</div>
 
   return (
-    <div>
-      <div className="page-header">
-        <div className="flex gap-8" style={{ alignItems: 'center' }}>
-          <Link to="/agents" className="btn btn-sm">← Agents</Link>
-          <h1 style={{ marginLeft: 8 }}>{agent.name || agent.agent_id}</h1>
-          <StatusBadge status={agent.status} />
-        </div>
-        <p className="mono dim">{agent.agent_id}</p>
+    <div className="agent-detail-layout">
+      {/* Header bar */}
+      <div className="agent-header-bar">
+        <Link to="/agents" className="btn btn-sm">← Agents</Link>
+        <span className="status-dot active" />
+        <h1>{agent.name || agent.agent_id}</h1>
+        <StatusBadge status={agent.status} />
+        <span className="mono dim" style={{ marginLeft: 'auto', fontSize: 11 }}>{agent.agent_id}</span>
       </div>
 
-      <div className="card">
-        <div className="card-title">Connection Info</div>
-        <div className="table-container">
-          <table>
-            <tbody>
-              <tr><td style={{ width: '150px' }} className="muted">Name</td><td>{agent.name}</td></tr>
-              <tr><td className="muted">Version</td><td>{agent.version}</td></tr>
-              <tr><td className="muted">OS / Arch</td><td className="mono">{agent.os} / {agent.arch}</td></tr>
-              <tr><td className="muted">Mode</td><td>{agent.mode}</td></tr>
-              <tr><td className="muted">Status</td><td><StatusBadge status={agent.status} /></td></tr>
-              <tr><td className="muted">Health Score</td><td className="mono">{(agent.health_score * 100).toFixed(1)}%</td></tr>
-              <tr><td className="muted">Connected At</td><td className="dim">{agent.connected_at ? new Date(agent.connected_at).toLocaleString() : '—'}</td></tr>
-              <tr><td className="muted">Last Heartbeat</td><td className="dim">{agent.last_heartbeat ? new Date(agent.last_heartbeat).toLocaleString() : '—'}</td></tr>
-              <tr><td className="muted">Uptime</td><td className="mono">{formatUptime(agent.uptime_seconds)}</td></tr>
-              <tr><td className="muted">Error Count</td><td className={agent.error_count > 0 ? 'red' : ''}>{agent.error_count}</td></tr>
-              {agent.last_error && <tr><td className="muted">Last Error</td><td className="red">{agent.last_error}</td></tr>}
-              {agent.resource_usage && (
-                <tr>
-                  <td className="muted">Resources</td>
-                  <td className="mono dim">
-                    CPU: {agent.resource_usage.cpu_percent.toFixed(1)}% |
-                    Mem: {agent.resource_usage.memory_mb.toFixed(0)}MB |
-                    Disk: {agent.resource_usage.disk_free_mb.toFixed(0)}MB
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="card-title">Capabilities</div>
-        <div className="flex gap-8" style={{ flexWrap: 'wrap' }}>
-          {(agent.capabilities || []).map(c => (
-            <span key={c} className="badge badge-green">{c}</span>
-          ))}
-          {(!agent.capabilities || agent.capabilities.length === 0) && (
-            <span className="dim">None advertised</span>
-          )}
-        </div>
-      </div>
-
-      <div className="tabs">
+      {/* Tab bar */}
+      <div className="agent-tabs">
         {tabs.map(tab => (
           <div
-            key={tab}
-            className={`tab ${activeTab === tab ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab)}
+            key={tab.name}
+            className={`agent-tab ${activeTab === tab.name ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab.name)}
           >
-            {tab}
+            <span className="tab-icon">{tab.icon}</span>
+            {tab.name}
           </div>
         ))}
       </div>
 
-      {activeTab === 'Terminal' && id && <TerminalTab agentId={id} />}
-      {activeTab === 'Files' && id && <FilesTab agentId={id} />}
-      {activeTab === 'Processes' && id && <ProcessesTab agentId={id} />}
-      {activeTab === 'Tunnels' && id && <TunnelsTab agentId={id} />}
-      {activeTab === 'MITM' && id && <MITMTab agentId={id} />}
-      {activeTab === 'Debug' && id && <DebugTab agentId={id} />}
-      {activeTab === 'Screen' && id && <ScreenTab agentId={id} />}
-      {activeTab === 'Audit' && (
-        <div className="card">
-          {audit.length === 0 ? (
-            <div className="empty-state">No audit entries for this agent</div>
-          ) : (
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr><th>Time</th><th>Action</th><th>Operator</th><th>Result</th></tr>
-                </thead>
-                <tbody>
-                  {audit.map((e, i) => (
-                    <tr key={i}>
-                      <td className="dim">{new Date(e.timestamp).toLocaleString()}</td>
-                      <td className="mono">{e.action}</td>
-                      <td className="dim">{e.operator_id || '—'}</td>
-                      <td className="dim">{e.result || e.error || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+      {/* Tab content - scrollable */}
+      <div className="agent-content">
+        {activeTab === 'Terminal' && id && <TerminalTab agentId={id} />}
+        {activeTab === 'Files' && id && <FilesTab agentId={id} />}
+        {activeTab === 'Processes' && id && <ProcessesTab agentId={id} />}
+        {activeTab === 'Tunnels' && id && <TunnelsTab agentId={id} />}
+        {activeTab === 'MITM' && id && <MITMTab agentId={id} />}
+        {activeTab === 'Debug' && id && <DebugTab agentId={id} />}
+        {activeTab === 'Screen' && id && <ScreenTab agentId={id} />}
+        {activeTab === 'Audit' && (
+          <div className="card">
+            {audit.length === 0 ? (
+              <div className="empty-state">No audit entries for this agent</div>
+            ) : (
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr><th>Time</th><th>Action</th><th>Operator</th><th>Result</th></tr>
+                  </thead>
+                  <tbody>
+                    {audit.map((e, i) => (
+                      <tr key={i}>
+                        <td className="dim">{new Date(e.timestamp).toLocaleString()}</td>
+                        <td className="mono">{e.action}</td>
+                        <td className="dim">{e.operator_id || '—'}</td>
+                        <td className="dim">{e.result || e.error || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Connection info bar - bottom */}
+      <div className="connection-bar">
+        <div className="conn-bar-item">
+          <span className="conn-bar-label">OS</span>
+          <span className="conn-bar-value">{agent.os}/{agent.arch}</span>
         </div>
-      )}
+        <div className="conn-bar-item">
+          <span className="conn-bar-label">VER</span>
+          <span className="conn-bar-value">{agent.version}</span>
+        </div>
+        <div className="conn-bar-item">
+          <span className="conn-bar-label">MODE</span>
+          <span className="conn-bar-value">{agent.mode}</span>
+        </div>
+        <div className="conn-bar-item">
+          <span className="conn-bar-label">UP</span>
+          <span className="conn-bar-value">{formatUptime(agent.uptime_seconds)}</span>
+        </div>
+        <div className="conn-bar-item">
+          <span className="conn-bar-label">HP</span>
+          <span className="conn-bar-value green">{(agent.health_score * 100).toFixed(0)}%</span>
+        </div>
+        <div className="conn-bar-item">
+          <span className="conn-bar-label">ERR</span>
+          <span className={`conn-bar-value ${agent.error_count > 0 ? 'red' : ''}`}>{agent.error_count}</span>
+        </div>
+        {agent.resource_usage && (
+          <div className="conn-bar-item">
+            <span className="conn-bar-label">CPU</span>
+            <span className="conn-bar-value">{agent.resource_usage.cpu_percent.toFixed(1)}%</span>
+          </div>
+        )}
+        {agent.resource_usage && (
+          <div className="conn-bar-item">
+            <span className="conn-bar-label">MEM</span>
+            <span className="conn-bar-value">{agent.resource_usage.memory_mb.toFixed(0)}MB</span>
+          </div>
+        )}
+        <div className="conn-bar-item">
+          <span className="conn-bar-label">CAPS</span>
+          <span className="conn-bar-value">{(agent.capabilities || []).join(', ') || '—'}</span>
+        </div>
+      </div>
     </div>
   )
 }

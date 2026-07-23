@@ -31,6 +31,7 @@ export default function Builder() {
   const [buildId, setBuildId] = useState('')
   const [buildStatus, setBuildStatus] = useState('')
   const [builds, setBuilds] = useState<BuildConfig[]>([])
+  const [vtScanning, setVTScanning] = useState<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval>>()
 
   useEffect(() => {
@@ -107,6 +108,40 @@ export default function Builder() {
     } catch (e) {
       setError((e as Error).message)
     }
+  }
+
+  const triggerVTScan = async (id: string) => {
+    setVTScanning(id)
+    try {
+      await api.triggerVTScan(id)
+      // Poll for VT scan result
+      const vtPoll = setInterval(async () => {
+        try {
+          const res = await api.getVTScan(id)
+          if (res.vt_status === 'clean' || res.vt_status === 'dirty') {
+            clearInterval(vtPoll)
+            setVTScanning(null)
+            loadBuilds()
+          }
+        } catch {
+          clearInterval(vtPoll)
+          setVTScanning(null)
+        }
+      }, 5000)
+    } catch (e) {
+      setError((e as Error).message)
+      setVTScanning(null)
+    }
+  }
+
+  const vtBadge = (b: BuildConfig) => {
+    if (vtScanning === b.id) return <span className="badge badge-yellow">scanning…</span>
+    if (!b.vt_status) return <span className="badge badge-gray">not scanned</span>
+    if (b.vt_status === 'clean') return <span className="badge badge-green">✓ clean ({b.vt_detections || 0}/0)</span>
+    if (b.vt_status === 'dirty') return <span className="badge badge-red">⚠ dirty ({b.vt_detections || 0} detections)</span>
+    if (b.vt_status === 'scanning') return <span className="badge badge-yellow">scanning…</span>
+    if (b.vt_status === 'pending') return <span className="badge badge-yellow">pending</span>
+    return <span className="badge badge-gray">{b.vt_status}</span>
   }
 
   return (
@@ -279,7 +314,7 @@ export default function Builder() {
           <div className="table-container">
             <table>
               <thead>
-                <tr><th>Name</th><th>OS/Arch</th><th>Status</th><th>Created</th><th>Actions</th></tr>
+                <tr><th>Name</th><th>OS/Arch</th><th>Status</th><th>VT Scan</th><th>Created</th><th>Actions</th></tr>
               </thead>
               <tbody>
                 {builds.map(b => (
@@ -287,12 +322,27 @@ export default function Builder() {
                     <td>{b.name}</td>
                     <td className="mono">{b.os}/{b.arch}</td>
                     <td><StatusBadge status={b.status || 'pending'} /></td>
+                    <td>
+                      <div className="flex gap-8" style={{ alignItems: 'center' }}>
+                        {vtBadge(b)}
+                        {b.vt_report_url && (
+                          <a href={b.vt_report_url} target="_blank" rel="noopener" className="dim" style={{ fontSize: 11 }}>report ↗</a>
+                        )}
+                      </div>
+                    </td>
                     <td className="dim">{b.created_at ? new Date(b.created_at).toLocaleString() : '—'}</td>
                     <td>
-                      {b.status === 'complete' && (
-                        <button className="btn btn-sm" onClick={() => downloadBuild(b.id!)}>Download</button>
-                      )}
-                      <button className="btn btn-danger btn-sm" onClick={() => removeBuild(b.id!)}>Delete</button>
+                      <div className="flex gap-8">
+                        {b.status === 'complete' && (
+                          <button className="btn btn-sm" onClick={() => downloadBuild(b.id!)}>Download</button>
+                        )}
+                        {b.status === 'complete' && !b.vt_status && (
+                          <button className="btn btn-sm" onClick={() => triggerVTScan(b.id!)} disabled={vtScanning === b.id}>
+                            VT Scan
+                          </button>
+                        )}
+                        <button className="btn btn-danger btn-sm" onClick={() => removeBuild(b.id!)}>Delete</button>
+                      </div>
                     </td>
                   </tr>
                 ))}

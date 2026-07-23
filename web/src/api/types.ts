@@ -56,6 +56,9 @@ export interface BuildConfig {
   created_at?: string
   completed_at?: string
   error?: string
+  vt_status?: string      // pending, scanning, clean, dirty
+  vt_detections?: number
+  vt_report_url?: string
 }
 
 export interface DisguiseConfig {
