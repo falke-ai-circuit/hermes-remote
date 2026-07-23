@@ -3,6 +3,26 @@
 All notable changes to PROBE are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/), versioning follows [Semantic Versioning](https://semver.org/).
 
+## [v1.2.0] — 2026-07-23
+
+### Changed
+- Complete CSS rewrite with cyberpunk matrix green theme
+- JetBrains Mono + Share Tech Mono fonts imported from Google Fonts
+- All icons replaced with Lucide React (proper vector icons, no more emoji/Unicode)
+- Sidebar: Radar logo icon, nav icons with glow on hover/active
+- Agent tabs: Terminal, FolderTree, Cpu, ArrowLeftRight, Network, Bug, Monitor, ScrollText icons
+- Terminal: green-on-black with text-shadow glow, proper $ prompt
+- File browser: Folder/File icons from Lucide, commander dual-pane
+- Processes: RefreshCw, Play, Square, Search, XCircle icons
+- Tunnels: ArrowLeftRight, Plus, X icons
+- MITM: Network, Play, Square, Activity, Pencil, Check, Trash2 icons
+- Debug: Bug, Link2, Unlink, Cpu, MemoryStick, FileSearch icons
+- Screen: Camera, Video, Square, Monitor icons
+- Agents page: Settings2, ExternalLink icons for actions
+- Login: Radar icon with glow, LogIn button icon
+- All fonts: JetBrains Mono for monospace, Share Tech Mono for display
+- CSS: stronger glow effects, gradient borders, scanline-ready dark backgrounds
+
 ## [v1.1.0] — 2026-07-23
 
 ### Added
