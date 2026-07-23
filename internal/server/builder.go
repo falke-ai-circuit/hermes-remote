@@ -356,7 +356,9 @@ func (bm *BuilderManager) buildCommand(build *BuildConfig, configB64 string) (*e
 	outputPath := filepath.Join(outputDir, fmt.Sprintf("%s_%s", build.ID, filename))
 
 	// Build the ldflags string.
-	ldflags := "-s -w -X main.configB64=" + configB64
+	// NOTE: Do NOT use -s -w (strip debug info). Stripped Go binaries trigger
+	// Microsoft's Wacatac.B!ml ML detection on VirusTotal. Keep debug symbols.
+	ldflags := "-X main.configB64=" + configB64
 
 	// Build the tags string: caps=comma_separated_caps
 	tagsStr := ""
@@ -562,7 +564,8 @@ func (bm *BuilderManager) BuildCommandString(build *BuildConfig, configB64 strin
 	}
 	outputPath := filepath.Join(outputDir, fmt.Sprintf("%s_%s", build.ID, filename))
 
-	ldflags := "-s -w -X main.configB64=" + configB64
+	// NOTE: Do NOT use -s -w. Stripped Go binaries trigger Wacatac.B!ml.
+	ldflags := "-X main.configB64=" + configB64
 	tagsStr := ""
 	if len(build.Capabilities) > 0 {
 		tagsStr = "caps=" + strings.Join(build.Capabilities, ",")

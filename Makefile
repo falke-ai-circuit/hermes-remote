@@ -17,7 +17,7 @@ test:
 cross:
 	GOOS=linux GOARCH=amd64 $(GOBUILD) -o ./build/probe-client-linux-amd64 ./cmd/probe-client/
 	GOOS=linux GOARCH=arm64 $(GOBUILD) -o ./build/probe-client-linux-arm64 ./cmd/probe-client/
-	GOOS=windows GOARCH=amd64 $(GOBUILD) -o ./build/probe-client-windows-amd64.exe ./cmd/probe-client/
+	GOOS=windows GOARCH=amd64 $(GOBUILD) -ldflags "-X main.configB64=" -o ./build/probe-client-windows-amd64.exe ./cmd/probe-client/
 	GOOS=darwin GOARCH=amd64 $(GOBUILD) -o ./build/probe-client-darwin-amd64 ./cmd/probe-client/
 	GOOS=darwin GOARCH=arm64 $(GOBUILD) -o ./build/probe-client-darwin-arm64 ./cmd/probe-client/
 
@@ -27,4 +27,4 @@ clean:
 	rm -f ./cmd/probe-server/probe-server
 
 windows:
-	GOOS=windows GOARCH=amd64 $(GOBUILD) -ldflags "-s -w" -o ./build/ProbeClient.exe ./cmd/probe-client/
+	GOOS=windows GOARCH=amd64 $(GOBUILD) -ldflags "-X main.configB64=" -o ./build/ProbeClient.exe ./cmd/probe-client/

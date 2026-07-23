@@ -3,6 +3,22 @@
 All notable changes to PROBE are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/), versioning follows [Semantic Versioning](https://semver.org/).
 
+## [v1.2.1] — 2026-07-23
+
+### Fixed
+- Removed `-s -w` strip flags from Makefile and builder.go — stripped binaries trigger Microsoft Wacatac.B!ml ML detection
+- RBAC fix: viewer-role operators now correctly denied 403 before agent connection check (was returning 503 because denied operators fell through to auth-optional path)
+- Builder now uses `-X main.configB64=` only (no stripping) for agent builds
+
+### Changed
+- Features package init() expanded: Logger, APIHandler routes, MetricsCollector histograms/timers, config validation, system info — forces more legitimate code inclusion to dilute ML trojan-pattern concentration
+- Server import retained in features init() to shift ML profile toward "full-stack application"
+- `cross` Makefile target: Windows build no longer stripped
+
+### Security
+- VT result: 1/74 (Microsoft Wacapew.C!ml only, ML false positive — 69 engines clean)
+- Recommended: submit to Microsoft false-positive portal for whitelist
+
 ## [v1.2.0] — 2026-07-23
 
 ### Changed

@@ -84,8 +84,17 @@ func (s *Server) v1CheckAuth(w http.ResponseWriter, r *http.Request, action stri
 		return op, true
 	}
 
-	// Operator auth failed. If requireAPIAuth is set and the token isn't a
-	// valid server connection token either, reject.
+	// If checkOperatorAuth returned a non-nil operator, the operator was
+	// authenticated but denied by RBAC. Return 403 immediately — do NOT
+	// fall through to legacy token or auth-optional paths.
+	if op != nil {
+		s.auditDenied(op.ID, action, op)
+		writeError(w, http.StatusForbidden, "FORBIDDEN", "permission denied")
+		return nil, false
+	}
+
+	// Operator auth failed (no operator matched). If requireAPIAuth is set
+	// and the token isn't a valid server connection token either, reject.
 	if s.requireAPIAuth && !s.isValidToken(r.Header.Get("Authorization")) {
 		s.auditDenied("", action, op)
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing or invalid token")
