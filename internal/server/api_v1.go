@@ -77,17 +77,29 @@ func generateRequestID() string {
 // request should proceed. On failure it writes a v1 error response and
 // returns false.
 func (s *Server) v1CheckAuth(w http.ResponseWriter, r *http.Request, action string) (*Operator, bool) {
+	// First try operator auth (bearer token from /api/v1/login).
+	// This handles RBAC mode where operators log in with username/password.
+	op, ok := s.checkOperatorAuth(r, action)
+	if ok {
+		return op, true
+	}
+
+	// Operator auth failed. If requireAPIAuth is set and the token isn't a
+	// valid server connection token either, reject.
 	if s.requireAPIAuth && !s.isValidToken(r.Header.Get("Authorization")) {
+		s.auditDenied("", action, op)
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing or invalid token")
 		return nil, false
 	}
-	op, ok := s.checkOperatorAuth(r, action)
-	if !ok {
-		s.auditDenied("", action, op)
-		writeError(w, http.StatusForbidden, "FORBIDDEN", "permission denied")
-		return nil, false
+
+	// If requireAPIAuth is false, allow through (auth optional).
+	if !s.requireAPIAuth {
+		return nil, true
 	}
-	return op, true
+
+	s.auditDenied("", action, op)
+	writeError(w, http.StatusForbidden, "FORBIDDEN", "permission denied")
+	return nil, false
 }
 
 // errorCodeFromStatus maps an HTTP status code to a v1 error code string.
