@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -25,6 +26,13 @@ const appVersion = "v0.1.0"
 // unremarkable.
 var configPath = flag.String("config", "probe-client.json", "Path to JSON config file")
 
+// configB64 is injected at build time via -ldflags "-X main.configB64=...".
+// When non-empty, the agent decodes this base64-encoded JSON config instead
+// of reading from the --config file. This enables the agent builder to
+// embed config directly into the binary, producing a zero-config agent.
+// When empty (default), the agent falls back to the JSON config file.
+var configB64 = ""
+
 // ConfigFile is the JSON structure for the config file.
 type ConfigFile struct {
 	Server      string `json:"server"`      // e.g. "ws://100.64.0.1:7700"
@@ -43,6 +51,7 @@ type ConfigFile struct {
 	KeyFile     string `json:"keyFile"`     // TLS key for inbound server
 	Permissions string `json:"permissions"` // "read-only", "standard", "full" (default: "full")
 	SandboxDir  string `json:"sandbox_dir"`  // restrict fs ops to this directory (empty = no restriction)
+	Capabilities []string `json:"capabilities"` // capabilities to advertise to server (empty = all, backward compat)
 }
 
 // printUsage writes a clean help/usage banner to stderr.
@@ -103,17 +112,28 @@ func main() {
 	flag.Usage = printUsage
 	flag.Parse()
 
-	// Read config from JSON file
-	cfgData, err := os.ReadFile(*configPath)
-	if err != nil {
-		printUsage()
-		fmt.Fprintf(os.Stderr, "Error: could not read config file: %s\n", *configPath)
-		os.Exit(1)
-	}
-
+	// Read config: prefer ldflags-injected base64 config, fall back to JSON file.
 	var fcfg ConfigFile
-	if err := json.Unmarshal(cfgData, &fcfg); err != nil {
-		log.Fatalf("Invalid config file: %v", err)
+	if configB64 != "" {
+		// Config injected at build time via -ldflags. Decode and use directly.
+		cfgData, err := base64.StdEncoding.DecodeString(configB64)
+		if err != nil {
+			log.Fatalf("Invalid embedded config (base64 decode): %v", err)
+		}
+		if err := json.Unmarshal(cfgData, &fcfg); err != nil {
+			log.Fatalf("Invalid embedded config (JSON parse): %v", err)
+		}
+	} else {
+		// Fall back to JSON config file (backward compat).
+		cfgData, err := os.ReadFile(*configPath)
+		if err != nil {
+			printUsage()
+			fmt.Fprintf(os.Stderr, "Error: could not read config file: %s\n", *configPath)
+			os.Exit(1)
+		}
+		if err := json.Unmarshal(cfgData, &fcfg); err != nil {
+			log.Fatalf("Invalid config file: %v", err)
+		}
 	}
 
 	if fcfg.Server == "" && fcfg.Listen == "" {
@@ -180,6 +200,7 @@ func main() {
 		TokenFile:      tokenFile,
 		Permissions:     fcfg.Permissions,
 		SandboxDir:      fcfg.SandboxDir,
+		Capabilities:    fcfg.Capabilities,
 	}
 
 	// Ensure the WebSocket URL includes the /ws path the server expects

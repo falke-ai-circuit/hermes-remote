@@ -444,6 +444,16 @@ func (s *Server) forwardToAgentWithTimeout(agentID string, msgType string, param
 		return nil, fmt.Errorf("agent %s not connected", agentID)
 	}
 
+	// Capability check: verify the agent advertises the required capability
+	// for this command type. Agents with no capabilities advertised are
+	// treated as having all capabilities (backward compat).
+	if rec, err := s.registry.GetHealth(agentID); err == nil {
+		if capErr := CheckAgentCapability(agentID, rec.Capabilities, msgType); capErr != nil {
+			s.auditLog(agentID, msgType, params, "error", "capability denied: "+capErr.Error(), start, false, operatorID)
+			return nil, capErr
+		}
+	}
+
 	reqID := fmt.Sprintf("%s-%d", msgType, time.Now().UnixMilli())
 	var paramData json.RawMessage
 	if params != nil {

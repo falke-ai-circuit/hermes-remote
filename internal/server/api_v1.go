@@ -283,6 +283,26 @@ func (s *Server) registerV1Routes() {
 		s.v1WrapAgentHandler("debug-mem-query", s.handleAgentDebugMemQuery))
 	s.mux.HandleFunc("POST /api/v1/agents/{id}/update",
 		s.v1WrapAgentHandler("update", s.handleAgentUpdate))
+
+	// Enrollment + revocation (Phase 3)
+	s.mux.HandleFunc("POST /api/v1/enroll", s.handleV1Enroll)
+	s.mux.HandleFunc("POST /api/v1/enrollment-tokens", s.handleV1CreateEnrollmentToken)
+	s.mux.HandleFunc("GET /api/v1/enrollment-tokens", s.handleV1ListEnrollmentTokens)
+	s.mux.HandleFunc("POST /api/v1/agents/{id}/revoke", s.handleV1RevokeAgent)
+	s.mux.HandleFunc("GET /api/v1/agents/revoked", s.handleV1ListRevokedAgents)
+
+	// Agent builder (Phase 4)
+	s.mux.HandleFunc("POST /api/v1/builds", s.handleV1CreateBuild)
+	s.mux.HandleFunc("GET /api/v1/builds", s.handleV1ListBuilds)
+	s.mux.HandleFunc("GET /api/v1/builds/{id}", s.handleV1GetBuild)
+	s.mux.HandleFunc("GET /api/v1/builds/{id}/download", s.handleV1DownloadBuild)
+	s.mux.HandleFunc("DELETE /api/v1/builds/{id}", s.handleV1DeleteBuild)
+
+	// Build profiles (Phase 4)
+	s.mux.HandleFunc("GET /api/v1/profiles", s.handleV1ListProfiles)
+	s.mux.HandleFunc("POST /api/v1/profiles", s.handleV1CreateProfile)
+	s.mux.HandleFunc("GET /api/v1/profiles/{id}", s.handleV1GetProfile)
+	s.mux.HandleFunc("DELETE /api/v1/profiles/{id}", s.handleV1DeleteProfile)
 }
 
 // ---------------------------------------------------------------------------

@@ -60,8 +60,15 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		agentID = fmt.Sprintf("a0-%s", hostname)
 	}
 
+	// Check if agent has been revoked — reject the connection.
+	if s.IsAgentRevoked(agentID) {
+		log.Printf("[server] revoked agent %s attempted to connect — rejecting", agentID)
+		conn.Close()
+		return
+	}
+
 	// Register agent
-	s.registry.Register(agentID, info.Name, info.Version, info.OS, info.Arch, info.Mode)
+	s.registry.Register(agentID, info.Name, info.Version, info.OS, info.Arch, info.Mode, info.Capabilities)
 
 	// Create session
 	s.sessions.CreateSession(agentID)

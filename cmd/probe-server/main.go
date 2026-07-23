@@ -24,6 +24,11 @@ func main() {
 	extraTokens := flag.String("extra-tokens", "", "Comma-separated additional auth tokens (for safe rollover: new server accepts old agent's token)")
 	requireAPIAuth := flag.Bool("require-api-auth", false, "Require bearer-token auth on HTTP API endpoints (/api/agents, /api/agent/*, /download/*). When false (default), missing auth is logged as a warning but allowed through.")
 	proxyFlags := flag.String("proxy", "", "Reverse proxy: path=target (repeatable via comma). Example: /logreport=http://localhost:8642. When empty, defaults to /logreport=http://localhost:8642 for backward compatibility.")
+	enrollmentPath := flag.String("enrollment-db", "", "enrollment tokens file path (default: PROBE_ENROLLMENT_DB env or /tmp/probe-enrollment.json)")
+	caDir := flag.String("ca-dir", "", "directory for CA cert/key storage (default: PROBE_CA_DIR env or /tmp/probe-ca)")
+	builderPath := flag.String("builder-db", "", "agent builder records file path (default: PROBE_BUILDER_DB env or /tmp/probe-builds.json)")
+	builderOutputDir := flag.String("builder-output-dir", "", "directory for built agent binaries (default: PROBE_BUILDER_OUTPUT_DIR env or /tmp/probe-builds)")
+	profilesPath := flag.String("profiles-db", "", "build profiles file path (default: PROBE_PROFILES_DB env or /tmp/probe-profiles.json)")
 	flag.Parse()
 
 	// Env vars as fallback
@@ -44,6 +49,36 @@ func main() {
 	}
 	if *extraTokens == "" {
 		*extraTokens = os.Getenv("PROBE_EXTRA_TOKENS")
+	}
+	if *enrollmentPath == "" {
+		*enrollmentPath = os.Getenv("PROBE_ENROLLMENT_DB")
+	}
+	if *enrollmentPath == "" {
+		*enrollmentPath = "/tmp/probe-enrollment.json"
+	}
+	if *caDir == "" {
+		*caDir = os.Getenv("PROBE_CA_DIR")
+	}
+	if *caDir == "" {
+		*caDir = "/tmp/probe-ca"
+	}
+	if *builderPath == "" {
+		*builderPath = os.Getenv("PROBE_BUILDER_DB")
+	}
+	if *builderPath == "" {
+		*builderPath = "/tmp/probe-builds.json"
+	}
+	if *builderOutputDir == "" {
+		*builderOutputDir = os.Getenv("PROBE_BUILDER_OUTPUT_DIR")
+	}
+	if *builderOutputDir == "" {
+		*builderOutputDir = "/tmp/probe-builds"
+	}
+	if *profilesPath == "" {
+		*profilesPath = os.Getenv("PROBE_PROFILES_DB")
+	}
+	if *profilesPath == "" {
+		*profilesPath = "/tmp/probe-profiles.json"
 	}
 
 	rlCfg := server.RateLimitConfig{
@@ -71,6 +106,10 @@ func main() {
 	}
 	srv.SetTokenTTL(*tokenTTL)
 	srv.SetRequireAPIAuth(*requireAPIAuth)
+	srv.SetEnrollmentPath(*enrollmentPath)
+	srv.SetCADir(*caDir)
+	srv.SetBuilderPath(*builderPath, *builderOutputDir)
+	srv.SetProfilesPath(*profilesPath)
 
 	// Configure reverse proxies. Default: LOGReport proxy for backward compat.
 	var proxies []server.ProxyEntry

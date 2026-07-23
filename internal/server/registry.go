@@ -33,6 +33,7 @@ type AgentRecord struct {
 	OS            string        `json:"os"`
 	Arch          string        `json:"arch"`
 	Mode          string        `json:"mode"`
+	Capabilities  []string      `json:"capabilities,omitempty"` // capabilities advertised by the agent
 	ConnectedAt   string        `json:"connected_at"`
 	LastHeartbeat string        `json:"last_heartbeat"`
 	Status        string        `json:"status"` // "active", "inactive", "stale", "error"
@@ -112,7 +113,7 @@ func NewRegistry(savePath string) *Registry {
 }
 
 // Register adds or updates an agent record.
-func (r *Registry) Register(agentID, name, version, goos, arch, mode string) {
+func (r *Registry) Register(agentID, name, version, goos, arch, mode string, capabilities []string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -124,6 +125,7 @@ func (r *Registry) Register(agentID, name, version, goos, arch, mode string) {
 		rec.OS = goos
 		rec.Arch = arch
 		rec.Mode = mode
+		rec.Capabilities = capabilities
 		rec.LastHeartbeat = nowStr
 		rec.lastHeartbeat = now
 		rec.Status = "active"
@@ -136,6 +138,7 @@ func (r *Registry) Register(agentID, name, version, goos, arch, mode string) {
 			OS:            goos,
 			Arch:          arch,
 			Mode:          mode,
+			Capabilities:  capabilities,
 			ConnectedAt:   nowStr,
 			LastHeartbeat: nowStr,
 			Status:        "active",

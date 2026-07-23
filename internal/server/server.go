@@ -81,6 +81,19 @@ type Server struct {
 
 	// Audit logging: persists every forwarded command as a JSONL entry.
 	audit *AuditLogger
+
+	// Enrollment: pre-shared token → per-agent cert → mTLS.
+	enrollment *EnrollmentManager
+	caManager  *CAManager
+
+	// Revoked agents: agent IDs that are rejected on WS connect.
+	revokedAgents *RevokedAgents
+
+	// Agent builder: cross-compiles agent binaries with embedded config.
+	builder *BuilderManager
+
+	// Build profiles: reusable build configuration templates.
+	profiles *ProfileManager
 }
 
 // startTime records when the server process began, used by /health for uptime.
@@ -107,6 +120,11 @@ func NewServer(addr string, token string, registryPath string) *Server {
 		proxies:       make(map[string]*ProxyEntry),
 		operators:     NewOperatorManager(""),
 		audit:         NewAuditLogger(""),
+		enrollment:    NewEnrollmentManager(""),
+		caManager:     NewCAManager(""),
+		revokedAgents: NewRevokedAgents(),
+		builder:       NewBuilderManager("", ""),
+		profiles:      NewProfileManager(""),
 	}
 }
 
@@ -275,6 +293,35 @@ func (s *Server) SetOperatorPath(path string) {
 // before Start/StartTLS.
 func (s *Server) SetAuditPath(path string) {
 	s.audit = NewAuditLogger(path)
+}
+
+// SetEnrollmentPath configures persistent enrollment token storage.
+// When set, enrollment tokens are loaded from / persisted to the given
+// file path. Must be called before Start/StartTLS.
+func (s *Server) SetEnrollmentPath(path string) {
+	s.enrollment = NewEnrollmentManager(path)
+}
+
+// SetCADir configures the directory where the server CA (self-signed cert
+// + key) is stored. The CA is generated on first run and used to sign
+// per-agent certificates during enrollment. Must be called before
+// Start/StartTLS.
+func (s *Server) SetCADir(dir string) {
+	s.caManager = NewCAManager(dir)
+}
+
+// SetBuilderPath configures persistent build storage. When set, build
+// records are loaded from / persisted to the given file path. Must be
+// called before Start/StartTLS.
+func (s *Server) SetBuilderPath(path, outputDir string) {
+	s.builder = NewBuilderManager(path, outputDir)
+}
+
+// SetProfilesPath configures persistent build profile storage. When set,
+// profiles are loaded from / persisted to the given file path. Must be
+// called before Start/StartTLS.
+func (s *Server) SetProfilesPath(path string) {
+	s.profiles = NewProfileManager(path)
 }
 
 // operatorContextKey is the context key used to store the authenticated

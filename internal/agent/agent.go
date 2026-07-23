@@ -52,6 +52,10 @@ type Config struct {
 	// SandboxDir restricts all filesystem operations to within this directory.
 	// Empty = no restriction. Combined with permissions tier for defense-in-depth.
 	SandboxDir string
+	// Capabilities is the list of capabilities this agent advertises to the
+	// server on connect (e.g. "exec", "filesystem", "capture"). When empty,
+	// the server treats the agent as having all capabilities (backward compat).
+	Capabilities []string
 }
 
 // Agent is the remote agent instance.
@@ -228,6 +232,7 @@ func (a *Agent) handleConnection(conn *websocket.Conn) {
 		Arch:            getArch(),
 		Mode:            a.cfg.Mode,
 		ProtocolVersion: "2",
+		Capabilities:    a.cfg.Capabilities,
 	}
 	if err := a.writeMessage(conn, protocol.Envelope{
 		ID:     "agent-info",

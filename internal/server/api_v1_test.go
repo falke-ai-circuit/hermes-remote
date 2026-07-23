@@ -188,8 +188,8 @@ func TestV1_ListAgents(t *testing.T) {
 	srv, cleanup := newV1TestServer(t)
 	defer cleanup()
 
-	srv.registry.Register("agent-1", "test-1", "1.0", "linux", "amd64", "outbound")
-	srv.registry.Register("agent-2", "test-2", "1.0", "windows", "amd64", "inbound")
+	srv.registry.Register("agent-1", "test-1", "1.0", "linux", "amd64", "outbound", nil)
+	srv.registry.Register("agent-2", "test-2", "1.0", "windows", "amd64", "inbound", nil)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/v1/agents", nil)
@@ -221,7 +221,7 @@ func TestV1_GetAgent(t *testing.T) {
 	srv, cleanup := newV1TestServer(t)
 	defer cleanup()
 
-	srv.registry.Register("agent-1", "test-1", "1.0", "linux", "amd64", "outbound")
+	srv.registry.Register("agent-1", "test-1", "1.0", "linux", "amd64", "outbound", nil)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/v1/agents/agent-1", nil)
@@ -253,7 +253,7 @@ func TestV1_DeleteAgent(t *testing.T) {
 	srv, cleanup := newV1TestServer(t)
 	defer cleanup()
 
-	srv.registry.Register("agent-1", "test-1", "1.0", "linux", "amd64", "outbound")
+	srv.registry.Register("agent-1", "test-1", "1.0", "linux", "amd64", "outbound", nil)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("DELETE", "/api/v1/agents/agent-1", nil)
@@ -293,7 +293,7 @@ func TestV1_AgentHealth(t *testing.T) {
 	srv, cleanup := newV1TestServer(t)
 	defer cleanup()
 
-	srv.registry.Register("agent-1", "test-1", "1.0", "linux", "amd64", "outbound")
+	srv.registry.Register("agent-1", "test-1", "1.0", "linux", "amd64", "outbound", nil)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/v1/agents/agent-1/health", nil)
@@ -710,7 +710,7 @@ func TestV1_LegacyRoutesStillWork(t *testing.T) {
 	srv, cleanup := newV1TestServer(t)
 	defer cleanup()
 
-	srv.registry.Register("agent-1", "test-1", "1.0", "linux", "amd64", "outbound")
+	srv.registry.Register("agent-1", "test-1", "1.0", "linux", "amd64", "outbound", nil)
 
 	// Legacy list agents — should return raw JSON array, not v1 format.
 	rec := httptest.NewRecorder()
@@ -741,7 +741,7 @@ func TestV1_MethodRouting(t *testing.T) {
 	srv, cleanup := newV1TestServer(t)
 	defer cleanup()
 
-	srv.registry.Register("agent-1", "test-1", "1.0", "linux", "amd64", "outbound")
+	srv.registry.Register("agent-1", "test-1", "1.0", "linux", "amd64", "outbound", nil)
 
 	// GET /api/v1/agents should work (list).
 	rec := httptest.NewRecorder()
