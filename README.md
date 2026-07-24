@@ -61,6 +61,24 @@ all available config fields and an example config.
 - **certFile** — TLS certificate (PEM) for inbound server mode
 - **keyFile** — TLS key (PEM) for inbound server mode
 
+## WebUI
+
+The embedded React WebUI (Vite + TypeScript) provides a full management interface:
+
+**Sidebar navigation:** Dashboard, Agents, Tasks, Transfers, Credentials, Builder, Profiles, Settings
+
+**Pages:**
+- **Dashboard** — agent overview, health status, quick actions
+- **Agents** — agent list with search, capabilities toggle, redeploy; Agent Detail with breadcrumb navigation (Agents > [Name] > [Tab]) and tabs: Terminal, Files, Processes, Tunnels, MITM, Debug, Screen, Audit
+- **Tasks** — scheduled task management (delayed, recurring, offline queue)
+- **Transfers** — global file transfer view across all agents with progress bars, status badges, pause/resume, filter by status
+- **Credentials** — scan agents for passwords, hashes, API keys, tokens, connection strings, AWS keys, private keys via regex; manual text paste scanner; OS-specific gather commands (Windows/Linux/macOS)
+- **Builder** — 5-step agent build wizard with capability checkboxes (tooltips on all 9 capabilities), cross-compilation, VirusTotal scan integration
+- **Profiles** — build profile management
+- **Settings** — server configuration
+
+**Builder capability tooltips:** all 9 capability checkboxes have descriptive `title` attributes explaining what each capability does.
+
 ## Two Modes
 
 - **Silent** — `--mode silent` in config. Daemon controlled from the main server via operative profile tools.

@@ -3,6 +3,21 @@
 All notable changes to PROBE are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/), versioning follows [Semantic Versioning](https://semver.org/).
 
+## [v1.3.0] — 2026-07-24
+
+### Added
+- **Credentials page** (`/credentials`) — scan agents for exposed secrets: passwords, hashes, API keys, tokens, connection strings, AWS keys, private keys via regex patterns; manual text paste scanner; OS-specific credential gather commands (Windows/Linux/macOS)
+- **Transfers page** (`/transfers`) — global file transfer view across all agents with progress bars, status badges, pause/resume controls, and filter by status
+- **Agent Detail breadcrumb** — breadcrumb navigation: Agents > [Name] > [Tab] with chevron separators
+- **Builder capability tooltips** — all 9 capability checkboxes have descriptive `title` attributes
+- **Sidebar updated** — added Transfers and Credentials navigation items (full sidebar: Dashboard, Agents, Tasks, Transfers, Credentials, Builder, Profiles, Settings)
+- API client methods: `listTransfers`, `getTransfer`, `pauseTransfer`, `resumeTransfer`, `verifyTransfer`
+- TypeScript types: `FileTransfer` and `CredentialMatch` interfaces
+- CSS: breadcrumb styles, spin animation for loading icons
+
+### Changed
+- Sidebar navigation reordered to include Transfers and Credentials between Tasks and Builder
+
 ## [v1.2.2] — 2026-07-23
 
 ### Fixed
