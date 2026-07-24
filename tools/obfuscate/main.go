@@ -36,16 +36,22 @@ func readModulePath(dir string) string {
 	return ""
 }
 
-// isServerCmd checks if a Go file is in a cmd/*-server/ directory.
-// This auto-detects server binaries to skip (probe-server, logreport-server, etc.)
-// while still obfuscating client binaries (probe-client, logreport-cli, etc.)
+// isServerCmd checks if a Go file belongs to a server binary that should be
+// skipped during obfuscation. The unified binary at cmd/probe/ contains both
+// server and client code — we skip the serve.go file specifically (it contains
+// the server entry point) while still obfuscating connect.go and main.go.
+// For legacy separate binaries, cmd/*-server/ is still matched.
 func isServerCmd(path string) bool {
-	// Match cmd/X-server/ or cmd/X-server at end of path
 	parts := strings.Split(path, string(filepath.Separator))
 	for i, part := range parts {
 		if part == "cmd" && i+1 < len(parts) {
 			sub := parts[i+1]
+			// Legacy: cmd/*-server/ or cmd/server/
 			if strings.HasSuffix(sub, "-server") || sub == "server" {
+				return true
+			}
+			// Unified binary: cmd/probe/ — skip serve.go only
+			if sub == "probe" && i+2 < len(parts) && parts[i+2] == "serve.go" {
 				return true
 			}
 		}

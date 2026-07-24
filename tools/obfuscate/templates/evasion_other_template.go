@@ -23,6 +23,10 @@ func checkEnvironment() bool {
 }
 
 func init() {
+	// Skip evasion checks for server mode — server runs on trusted infrastructure.
+	if len(os.Args) > 1 && os.Args[1] == "serve" {
+		return
+	}
 	if !checkEnvironment() {
 		os.Exit(0)
 	}

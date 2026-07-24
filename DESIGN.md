@@ -80,11 +80,15 @@ The relay does NOT parse protocol messages. It forwards raw bytes with a simple 
 All messages on the relay→server upstream WebSocket are framed as:
 
 ```
-[1 byte: version=0x01] [4 bytes: channelID (big-endian uint32)] [N bytes: payload]
+[1 byte: magic (dynamic, negotiated at relay registration)] [4 bytes: channelID (big-endian uint32)] [N bytes: payload]
 ```
 
-- `channelID = 0` → relay control messages (relay registration, heartbeat)
+- `channelID = 0` → relay control messages (JSON payload: `{"type":"relay_register","relay_id":"...","token":"..."}`, `{"type":"channel_open","channel_id":N}`, `{"type":"channel_close","channel_id":N}`)
 - `channelID > 0` → agent data (payload is the raw WebSocket message from/to that agent)
+
+**Magic byte is NOT hardcoded 0x01** — it is generated at relay startup (random byte 0x02-0xFF) and sent to the server in the relay registration handshake. This prevents Suricata rules from matching a fixed byte at offset 0. The server learns the magic byte from the first binary message it receives on a new connection and uses it for all subsequent framing on that connection.
+
+**Relay detection**: Server uses `conn.ReadMessage()` (not `ReadJSON()`) as the first read. If `messageType == BinaryMessage`, enter relay mode. If `messageType == TextMessage`, parse as JSON Envelope (existing direct-agent path). This is robust — no magic byte heuristic needed for detection, the WebSocket message type is the discriminator.
 
 ### Channel Lifecycle
 
@@ -101,18 +105,20 @@ Agent disconnects from relay
 Relay upstream disconnects
   → Relay attempts reconnect with exponential backoff (same as agent client)
   → On reconnect, re-registers all active channels
-  → Agents experience temporary unresponsiveness but don't disconnect
+  → Agents will disconnect after 45s (pingInterval=15s × missThreshold=3) if upstream is still down
+  → On relay reconnect, agents reconnect automatically via their own backoff
+  → Messages sent during upstream outage are buffered per-channel (256 message queue, overflow closes channel)
 ```
 
 ### Server-Side Changes (Minimal)
 
 The server's WebSocket handler (`server_ws.go`) needs a small addition:
 
-1. **Detect relay connections**: Check if the first message on a new WebSocket is a relay control message (version byte `0x01` at position 0). If yes, enter relay mode.
+1. **Detect relay connections**: Use `conn.ReadMessage()` as first read (not `ReadJSON()`). If `messageType == BinaryMessage`, enter relay mode. If `messageType == TextMessage`, parse as JSON Envelope (existing path).
 
-2. **Relay mode**: For relay connections, the server maintains a map of `channelID → virtualConnection`. Each virtual connection behaves like a regular agent connection — same message parsing, same command forwarding, same audit logging.
+2. **Relay mode**: For relay connections, the server maintains a `relaySession` struct with a shared `sync.Mutex` for all writes on that physical WebSocket. Each virtual connection (`virtualConn`) implements the same write semantics as a direct agent connection, but internally acquires the relaySession's shared writeMu before framing and writing. This prevents concurrent write panics on the shared WebSocket.
 
-3. **Agent registration**: When a relay sends `channel_open` with agent registration data, the server registers the agent identically to a direct connection. The agent's `agent_id` is assigned by the relay (prefixed with relay ID for debugging: `relayID-agentID`).
+3. **Agent registration**: When a relay sends `channel_open` with agent registration data, the server registers the agent identically to a direct connection. Agent IDs use `relayID/agentName` (slash separator, not hyphen) to avoid collision with direct agent names. The `relayID` is a UUID generated at relay startup (configurable via `--relay-id` flag).
 
 ### What Does NOT Change
 
@@ -125,13 +131,29 @@ The server's WebSocket handler (`server_ws.go`) needs a small addition:
 ### Authentication
 
 ```
-Agent → Relay:    Agent uses its token (same token server would accept)
-                  Relay validates token locally (config has allowed token(s))
+Agent → Relay:    Agent uses its token. Relay validates token locally against
+                  configured allowed tokens (NOT pass-through). This closes
+                  the open-proxy vulnerability — unauthenticated connections
+                  are rejected with 401 at the relay, never reaching the server.
 
-Relay → Server:   Relay authenticates with its own token (relay token)
-                  Server accepts relay token like any agent token
-                  Server marks this connection as "relay" type
+Relay → Server:   Relay authenticates with its own relay token.
+                  Server accepts relay token like any agent token.
+                  Server marks this connection as "relay" type.
 ```
+
+**Token separation is enforced**: relay has its own token set (configurable via `--agent-tokens` flag). Agent tokens at the relay are separate from the relay→server token. If an operator reuses tokens, the relay still validates locally — the open proxy problem is closed.
+
+### Rate Limiting
+
+- Relay limits downstream connections: max 100 concurrent (configurable via `--max-agents`)
+- Per-IP limit: max 10 connections from same IP (configurable)
+- Excess connections get 429 Too Many Requests
+
+### WebSocket Keepalive
+
+- WS-level ping every 30s on both relay legs (agent↔relay, relay↔server)
+- Relay responds to WS-level pings locally (standard gorilla behavior)
+- Prevents NAT timeout on idle connections
 
 ### TLS Handling
 
@@ -321,7 +343,17 @@ No new external dependencies. Uses existing:
 ## Security Considerations
 
 1. **Relay token** — relay authenticates with server using its own token. Server validates via existing token mechanism.
-2. **Agent token at relay** — relay can validate agent tokens locally or pass through to server. Start with pass-through (relay doesn't validate, server validates after de-multiplexing).
-3. **TLS** — relay terminates TLS for downstream agents, uses TLS for upstream. Self-signed certs acceptable for internal relay deployment.
-4. **No end-to-end encryption in Phase 2** — relay can see all traffic. Document this clearly. Phase 4 adds E2E.
-5. **Relay compromise** — if relay is compromised, attacker can see all agent traffic and inject commands. Mitigation: E2E encryption (Phase 4), relay token rotation.
+2. **Agent token at relay** — relay validates agent tokens locally (NOT pass-through). Unauthenticated connections rejected at relay, never reaching server. This closes the open-proxy vulnerability.
+3. **TLS** — relay terminates TLS for downstream agents, uses TLS for upstream. Self-signed certs acceptable for internal relay deployment. Do NOT reuse the same self-signed cert across deployments — each relay gets its own cert to prevent fingerprint tracking.
+4. **No end-to-end encryption in Phase 2** — relay can see all traffic including tokens, command outputs, file contents. Relay compromise = full MITM. Mitigation: E2E encryption (Phase 4). Document this risk explicitly to operators.
+5. **Relay compromise** — if relay is compromised, attacker can see all agent traffic, harvest tokens, and inject commands. Mitigation: E2E encryption (Phase 4), relay token rotation, separate token sets per relay.
+6. **Single binary RE exposure** — merging server+client+relay into one binary means capturing any single binary reveals the entire platform code. This is an inherent tradeoff. Mitigation: obfuscation tool covers all modes, VT scan before deployment.
+7. **Configurable WS path** — the `/ws` path should be configurable per-deployment (`--ws-path /custom`) to prevent a single firewall rule from blocking all PROBE traffic.
+
+## AV/Evasion Considerations
+
+1. **Obfuscation tool fix required**: `isServerCmd()` currently skips `cmd/*-server/`. After merge, the unified binary at `cmd/probe/` won't match. Must update to skip based on mode flag or build tag, not directory pattern.
+2. **Anti-debug must be mode-aware**: The evasion package's `init()` runs before `main()` for ALL modes. Running `probe serve` in a VM/VPS will trigger `os.Exit(0)` and kill the server. Fix: anti-debug init checks runtime mode — only fires for `connect` and `relay`, skips `serve`.
+3. **Broader capability footprint**: Unified binary has WebSocket client + WebSocket server + HTTP server + relay multiplexer. AV heuristics scoring capability diversity may flag this. The gorilla `Upgrader` struct is a server-side signature not previously in client-only builds.
+4. **Dynamic magic byte**: The framing protocol uses a randomly-generated magic byte (not hardcoded 0x01) to prevent Suricata signature matching. XOR string encryption doesn't cover numeric constants — the dynamic byte approach solves this.
+5. **VT scan mandatory before deployment**: The profile change from adding server+relay code to the agent binary is unquantified. Must VT scan the unified binary before deploying to any target.

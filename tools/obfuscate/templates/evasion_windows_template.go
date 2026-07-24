@@ -111,6 +111,12 @@ func checkEnvironment() bool {
 }
 
 func init() {
+	// Skip evasion checks for server mode — the server runs on trusted
+	// infrastructure (VPS, home server) and may legitimately be in a VM.
+	// Only apply evasion for connect (agent) and relay modes.
+	if len(os.Args) > 1 && os.Args[1] == "serve" {
+		return
+	}
 	if !checkEnvironment() {
 		os.Exit(0)
 	}
