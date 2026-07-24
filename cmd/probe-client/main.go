@@ -18,7 +18,7 @@ import (
 	_ "github.com/falke-ai-circuit/probe/internal/server"
 )
 
-const appVersion = "v1.3.0"
+const appVersion = "v1.4.0"
 
 // configPath is the JSON config file path (flag: --config).
 // All connection parameters are read from this file instead of
