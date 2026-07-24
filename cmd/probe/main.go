@@ -22,8 +22,7 @@ func main() {
 	case "connect":
 		runConnect(args)
 	case "relay":
-		fmt.Fprintf(os.Stderr, "PROBE %s\nrelay mode is not yet implemented (Phase 2)\n", appVersion)
-		os.Exit(1)
+		runRelay(args)
 	case "--version", "-version", "version":
 		fmt.Printf("PROBE %s\n", appVersion)
 	case "--help", "-h", "help":

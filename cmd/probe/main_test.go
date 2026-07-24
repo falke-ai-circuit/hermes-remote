@@ -122,14 +122,25 @@ func TestCLI_ConnectVersion(t *testing.T) {
 	}
 }
 
-func TestCLI_RelayNotImplemented(t *testing.T) {
+func TestCLI_RelayRequiresUpstream(t *testing.T) {
 	bin := buildProbe(t)
 	_, stderr, code := runProbe(t, bin, "relay")
 	if code == 0 {
-		t.Errorf("expected non-zero exit for unimplemented relay, got 0")
+		t.Errorf("expected non-zero exit for relay without --upstream, got 0")
 	}
-	if !strings.Contains(stderr, "not yet implemented") {
-		t.Errorf("expected 'not yet implemented' in stderr, got: %s", stderr)
+	if !strings.Contains(stderr, "--upstream is required") {
+		t.Errorf("expected '--upstream is required' in stderr, got: %s", stderr)
+	}
+}
+
+func TestCLI_RelayVersion(t *testing.T) {
+	bin := buildProbe(t)
+	stdout, _, code := runProbe(t, bin, "relay", "--version")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+	if !strings.Contains(stdout, "PROBE Relay") {
+		t.Errorf("expected 'PROBE Relay' in output, got: %s", stdout)
 	}
 }
 

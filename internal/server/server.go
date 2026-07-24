@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/falke-ai-circuit/probe/internal/protocol"
-	"github.com/gorilla/websocket"
 )
 
 // RateLimitConfig holds the rate-limiter settings supplied from the CLI /
@@ -43,7 +42,7 @@ type Server struct {
 	clientCAFile string // optional CA for TLS mutual authentication (mTLS)
 
 	mu        sync.RWMutex
-	conns     map[string]*websocket.Conn // agentID -> conn
+	conns     map[string]Conn   // agentID -> conn (direct *websocket.Conn or relayed *virtualConn)
 	connWriteMu map[string]*sync.Mutex    // agentID -> write mutex (prevents parallel WS write corruption)
 
 	// pendingRequests maps request IDs to response channels for request-response
@@ -130,7 +129,7 @@ func NewServer(addr string, token string, registryPath string) *Server {
 		registry:      reg,
 		sessions:      NewSessionManager(),
 		proxy:         NewLLMProxy(),
-		conns:         make(map[string]*websocket.Conn),
+		conns:         make(map[string]Conn),
 		connWriteMu:   make(map[string]*sync.Mutex),
 		pendingReqs:   make(map[string]chan protocol.Envelope),
 		pendingUpdates: make(map[string]*pendingUpdate),

@@ -35,10 +35,26 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read initial agent info message
+	// Read first message — detect relay vs direct agent.
+	// Relay connections send BinaryMessage with framing header.
+	// Direct agents send TextMessage with JSON Envelope.
+	msgType, firstData, err := conn.ReadMessage()
+	if err != nil {
+		log.Printf("[server] failed to read first message: %v", err)
+		conn.Close()
+		return
+	}
+
+	if msgType == websocket.BinaryMessage {
+		// Relay connection — handle in relay mode
+		s.handleRelayConnection(conn, firstData)
+		return
+	}
+
+	// Direct agent connection — parse first message as JSON Envelope
 	var env protocol.Envelope
-	if err := conn.ReadJSON(&env); err != nil {
-		log.Printf("[server] failed to read agent info: %v", err)
+	if err := json.Unmarshal(firstData, &env); err != nil {
+		log.Printf("[server] failed to parse agent info: %v", err)
 		conn.Close()
 		return
 	}
