@@ -10,7 +10,7 @@ import { TunnelsTab } from '../components/agent/TunnelsTab'
 import { MITMTab } from '../components/agent/MITMTab'
 import { DebugTab } from '../components/agent/DebugTab'
 import { ScreenTab } from '../components/agent/ScreenTab'
-import { ArrowLeft, Terminal, FolderTree, Cpu, ArrowLeftRight, Network, Bug, Monitor, ScrollText } from 'lucide-react'
+import { ChevronRight, Terminal, FolderTree, Cpu, ArrowLeftRight, Network, Bug, Monitor, ScrollText } from 'lucide-react'
 
 const tabs = [
   { name: 'Terminal', icon: Terminal },
@@ -50,9 +50,14 @@ export default function AgentDetail() {
   return (
     <div className="agent-detail-layout">
       <div className="agent-header-bar">
-        <Link to="/agents" className="btn btn-sm"><ArrowLeft size={14} /> Agents</Link>
+        <div className="breadcrumb">
+          <Link to="/agents" className="breadcrumb-link">Agents</Link>
+          <ChevronRight size={14} className="breadcrumb-sep" />
+          <span className="breadcrumb-current">{agent.name || agent.agent_id}</span>
+          <ChevronRight size={14} className="breadcrumb-sep" />
+          <span className="breadcrumb-tab">{activeTab}</span>
+        </div>
         <span className={`status-dot ${agent.status === 'active' ? 'active' : 'inactive'}`} />
-        <h1>{agent.name || agent.agent_id}</h1>
         <StatusBadge status={agent.status} />
         <span className="mono dim" style={{ marginLeft: 'auto', fontSize: 11 }}>{agent.agent_id}</span>
       </div>

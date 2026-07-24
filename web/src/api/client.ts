@@ -1,6 +1,6 @@
 import type {
   APIResponse, AgentRecord, HealthInfo, BuildConfig, Profile, Task,
-  Operator, EnrollmentToken, AuditEntry, RevokedAgent,
+  Operator, EnrollmentToken, AuditEntry, RevokedAgent, FileTransfer,
 } from './types'
 
 const BASE = '/api/v1'
@@ -241,4 +241,21 @@ export const api = {
     apiFetch<{ status: string; message?: string }>(`/builds/${buildId}/vt-scan`, { method: 'POST', body: '{}' }),
   getVTScan: (buildId: string) =>
     apiFetch<{ vt_status: string; detections: number; total: number; report_url: string }>(`/builds/${buildId}/vt-scan`),
+
+  // File transfers (global)
+  listTransfers: () => apiFetch<FileTransfer[]>('/transfers'),
+  getTransfer: (id: string) =>
+    apiFetch<FileTransfer & { percent: number }>(`/transfers/${id}`),
+  pauseTransfer: (id: string) =>
+    apiFetch<{ paused: string }>(`/transfers/${id}/pause`, { method: 'POST', body: '{}' }),
+  resumeTransfer: (id: string, localPath?: string) =>
+    apiFetch<{ resumed: string }>(`/transfers/${id}/resume`, {
+      method: 'POST',
+      body: JSON.stringify({ local_path: localPath || '' }),
+    }),
+  verifyTransfer: (id: string, verifyPath: string) =>
+    apiFetch<{ verified: boolean; expected: string; actual: string }>(`/transfers/${id}/verify`, {
+      method: 'POST',
+      body: JSON.stringify({ verify_path: verifyPath }),
+    }),
 }

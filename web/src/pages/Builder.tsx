@@ -4,6 +4,18 @@ import type { BuildConfig } from '../api/types'
 import { StatusBadge } from '../components/StatusBadge'
 
 const ALL_CAPS = ['exec', 'filesystem', 'process', 'tunnel', 'mitm', 'debug', 'capture', 'input', 'clipboard']
+
+const CAP_DESCRIPTIONS: Record<string, string> = {
+  exec: 'Execute shell commands on the remote system',
+  filesystem: 'Browse, read, write, and manage files on the remote system',
+  process: 'List, start, and kill processes on the remote system',
+  tunnel: 'Open TCP tunnels through the agent to reach internal services',
+  mitm: 'Man-in-the-middle proxy for intercepting and analyzing network traffic',
+  debug: 'Attach to processes, read memory, and inspect loaded modules',
+  capture: 'Capture screenshots of the remote system display',
+  input: 'Send keyboard and mouse input to the remote system',
+  clipboard: 'Read and write the remote system clipboard',
+}
 const OS_OPTIONS = ['windows', 'linux', 'darwin']
 const ARCH_OPTIONS = ['amd64', '386', 'arm64']
 const PERMISSIONS = ['read-only', 'standard', 'sandboxed', 'full']
@@ -194,7 +206,7 @@ export default function Builder() {
             <div className="card-title">Select Capabilities</div>
             <div className="checkbox-group">
               {ALL_CAPS.map(cap => (
-                <label key={cap} className={`checkbox-item ${caps.includes(cap) ? 'checked' : ''}`}>
+                <label key={cap} className={`checkbox-item ${caps.includes(cap) ? 'checked' : ''}`} title={CAP_DESCRIPTIONS[cap]}>
                   <input type="checkbox" checked={caps.includes(cap)} onChange={() => toggleCap(cap)} />
                   {cap}
                 </label>

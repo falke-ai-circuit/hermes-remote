@@ -140,3 +140,26 @@ export interface RevokedAgent {
   revoked_at: string
   reason: string
 }
+
+export interface FileTransfer {
+  id: string
+  agent_id: string
+  direction: string      // "upload" or "download"
+  remote_path: string
+  total_size: number
+  offset: number
+  chunk_size: number
+  sha256?: string
+  status: string         // "pending", "transferring", "completed", "failed", "paused"
+  created_at: string
+  updated_at: string
+  error?: string
+}
+
+export interface CredentialMatch {
+  type: string            // "password", "hash", "api_key", "token", "connection_string"
+  source: string          // agent ID or "manual"
+  context: string         // surrounding text
+  value: string           // the matched credential
+  timestamp: string
+}

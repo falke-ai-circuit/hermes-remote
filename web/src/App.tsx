@@ -6,6 +6,8 @@ import AgentDetail from './pages/AgentDetail'
 import Builder from './pages/Builder'
 import Profiles from './pages/Profiles'
 import Tasks from './pages/Tasks'
+import Transfers from './pages/Transfers'
+import Credentials from './pages/Credentials'
 import Settings from './pages/Settings'
 import Login from './pages/Login'
 import { getToken } from './api/client'
@@ -29,6 +31,8 @@ export default function App() {
           <Route path="/builds" element={<Builder />} />
           <Route path="/profiles" element={<Profiles />} />
           <Route path="/tasks" element={<Tasks />} />
+          <Route path="/transfers" element={<Transfers />} />
+          <Route path="/credentials" element={<Credentials />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

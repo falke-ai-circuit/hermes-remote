@@ -353,6 +353,24 @@ table tr.clickable { cursor: pointer; }
 }
 .agent-header-bar h1 { font-size: 20px; font-weight: 600; font-family: var(--font-mono); }
 
+/* === BREADCRUMB === */
+.breadcrumb {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 14px;
+}
+.breadcrumb-link {
+  color: var(--text-muted); transition: color 0.15s;
+}
+.breadcrumb-link:hover { color: var(--green); text-shadow: var(--green-glow-dim); }
+.breadcrumb-sep { color: var(--text-dim); opacity: 0.5; }
+.breadcrumb-current { color: var(--green); text-shadow: var(--green-glow-dim); font-weight: 600; }
+.breadcrumb-tab {
+  color: var(--text-muted); font-size: 12px;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  padding: 2px 8px; border-radius: 3px; background: rgba(0,255,65,0.05);
+  border: 1px solid var(--border-glow);
+}
+
 /* === TABS === */
 .agent-tabs, .tabs {
   display: flex; gap: 0;
@@ -423,6 +441,8 @@ table tr.clickable { cursor: pointer; }
   0%,100% { box-shadow: 0 0 4px var(--red); }
   50% { box-shadow: 0 0 10px var(--red), 0 0 18px rgba(255,0,60,0.4); }
 }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; }
 
 /* === TOOLBAR === */
 .toolbar { display: flex; align-items: center; gap: 8px; padding: 0 0 14px 0; flex-shrink: 0; }
