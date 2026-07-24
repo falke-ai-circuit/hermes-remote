@@ -15,11 +15,11 @@ import { ArrowLeft, Terminal, FolderTree, Cpu, ArrowLeftRight, Network, Bug, Mon
 const tabs = [
   { name: 'Terminal', icon: Terminal },
   { name: 'Files', icon: FolderTree },
+  { name: 'Screen', icon: Monitor },
   { name: 'Processes', icon: Cpu },
   { name: 'Tunnels', icon: ArrowLeftRight },
   { name: 'MITM', icon: Network },
   { name: 'Debug', icon: Bug },
-  { name: 'Screen', icon: Monitor },
   { name: 'Audit', icon: ScrollText },
 ] as const
 type TabName = typeof tabs[number]['name']

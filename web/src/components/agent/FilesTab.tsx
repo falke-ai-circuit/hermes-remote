@@ -61,13 +61,21 @@ export function FilesTab({ agentId }: { agentId: string }) {
           <div className="file-list">
             {loading ? <div className="loading">Loading…</div> :
              entries.length === 0 && !error ? <div className="empty-state">Empty directory</div> :
-             entries.map((e, i) => (
+             <div>
+             <div className="file-item file-header" style={{ cursor: 'default', fontWeight: 600, fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)', marginBottom: 4 }}>
+               <span className="file-icon" />
+               <span className="file-name">Name</span>
+               <span className="file-size">Size</span>
+             </div>
+             {entries.map((e, i) => (
               <div key={i} className={`file-item ${e.is_dir ? 'dir' : ''} ${selected === e ? 'selected' : ''}`} onClick={() => onFileClick(e)} onDoubleClick={() => navigateTo(e)}>
                 <span className="file-icon">{e.is_dir ? <Folder size={14} /> : <File size={14} />}</span>
                 <span className="file-name">{e.name}</span>
                 <span className="file-size">{e.is_dir ? '—' : formatSize(e.size)}</span>
               </div>
             ))}
+            </div>
+            }
           </div>
         </div>
         <div className="file-pane">

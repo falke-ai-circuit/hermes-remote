@@ -16,7 +16,7 @@ export default function Profiles() {
     os: 'windows',
     arch: 'amd64',
     capabilities: ['exec', 'filesystem'],
-    server_url: 'ws://localhost:8080/ws',
+    server_url: 'wss://localhost:7700/ws',
     permissions: 'full',
     autostart: true,
   })
@@ -130,7 +130,10 @@ export default function Profiles() {
 
       <div className="card">
         {profiles.length === 0 ? (
-          <div className="empty-state">No profiles saved</div>
+          <div className="empty-state">
+            <p>No profiles saved</p>
+            <button className="btn btn-primary btn-sm" style={{ marginTop: 12 }} onClick={() => setShowForm(true)}>+ New Profile</button>
+          </div>
         ) : (
           <div className="table-container">
             <table>

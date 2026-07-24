@@ -126,7 +126,10 @@ export default function Tasks() {
 
       <div className="card">
         {tasks.length === 0 ? (
-          <div className="empty-state">No tasks</div>
+          <div className="empty-state">
+            <p>No tasks</p>
+            <button className="btn btn-primary btn-sm" style={{ marginTop: 12 }} onClick={() => setShowForm(true)}>+ New Task</button>
+          </div>
         ) : (
           <div className="table-container">
             <table>

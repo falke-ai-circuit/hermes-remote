@@ -15,7 +15,7 @@ export default function Builder() {
   const [os, setOS] = useState('windows')
   const [arch, setArch] = useState('amd64')
   const [caps, setCaps] = useState<string[]>(['exec', 'filesystem'])
-  const [serverURL, setServerURL] = useState('ws://localhost:8080/ws')
+  const [serverURL, setServerURL] = useState('wss://localhost:7700/ws')
   const [token, setToken] = useState('')
   const [name, setName] = useState('')
   const [permissions, setPermissions] = useState('full')

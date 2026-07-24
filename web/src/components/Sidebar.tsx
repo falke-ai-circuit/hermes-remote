@@ -5,9 +5,9 @@ import { LayoutDashboard, Monitor, Wrench, Layers, Clock, Settings, LogOut, Rada
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/agents', label: 'Agents', icon: Monitor },
+  { to: '/tasks', label: 'Tasks', icon: Clock },
   { to: '/builds', label: 'Builder', icon: Wrench },
   { to: '/profiles', label: 'Profiles', icon: Layers },
-  { to: '/tasks', label: 'Tasks', icon: Clock },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
