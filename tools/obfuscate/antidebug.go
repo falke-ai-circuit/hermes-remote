@@ -81,6 +81,14 @@ func applyAntiDebug(dir string) {
 		return
 	}
 
+	// Read module path from go.mod for the import path
+	modulePath := readModulePath(dir)
+	if modulePath == "" {
+		fmt.Fprintf(os.Stderr, "  ANTIDEBUG: could not read module path from go.mod, skipping\n")
+		return
+	}
+	evasionImportPath := modulePath + "/internal/evasion"
+
 	// Generate the evasion package under internal/evasion/
 	evasionDir := filepath.Join(dir, "internal", "evasion")
 	os.MkdirAll(evasionDir, 0755)
@@ -122,7 +130,7 @@ func netInterfaces() ([]string, error) {
 
 	// Inject blank import into main.go
 	mainGoPath := filepath.Join(mainPkgDir, "main.go")
-	injectBlankImport(mainGoPath, "github.com/falke-ai-circuit/probe/internal/evasion")
+	injectBlankImport(mainGoPath, evasionImportPath)
 
 	fmt.Printf("  ANTIDEBUG: generated internal/evasion/ package\n")
 	fmt.Printf("  ANTIDEBUG: injected blank import into %s\n", mainGoPath)

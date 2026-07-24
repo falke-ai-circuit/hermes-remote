@@ -33,7 +33,7 @@ func applyJitter(dir string) {
 		if strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		if strings.Contains(path, "cmd/probe-server") {
+		if isServerCmd(path) {
 			return nil
 		}
 		if strings.Contains(path, "tools/obfuscate") {

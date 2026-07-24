@@ -19,6 +19,40 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
+// readModulePath reads the module path from go.mod in the given directory.
+// Returns empty string if go.mod is not found or has no module directive.
+func readModulePath(dir string) string {
+	goModPath := filepath.Join(dir, "go.mod")
+	data, err := os.ReadFile(goModPath)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
+		}
+	}
+	return ""
+}
+
+// isServerCmd checks if a Go file is in a cmd/*-server/ directory.
+// This auto-detects server binaries to skip (probe-server, logreport-server, etc.)
+// while still obfuscating client binaries (probe-client, logreport-cli, etc.)
+func isServerCmd(path string) bool {
+	// Match cmd/X-server/ or cmd/X-server at end of path
+	parts := strings.Split(path, string(filepath.Separator))
+	for i, part := range parts {
+		if part == "cmd" && i+1 < len(parts) {
+			sub := parts[i+1]
+			if strings.HasSuffix(sub, "-server") || sub == "server" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func randKey() byte {
 	return byte(rand.Intn(255) + 1) // 1-255, never 0 (0 = no encryption)
 }
@@ -274,8 +308,9 @@ func main() {
 		if strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		// Skip probe-server (we only obfuscate the client binary)
-		if strings.Contains(path, "cmd/probe-server") {
+		// Skip server binaries — auto-detect any cmd/*-server/ pattern
+		// (probe-server, logreport-server, etc.)
+		if isServerCmd(path) {
 			return nil
 		}
 		// Skip the obfuscation tool itself
