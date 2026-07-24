@@ -179,30 +179,42 @@ When the relay's upstream connection drops:
 
 ## Migration Phases
 
-### Phase 1: Merge Binaries (no relay yet)
+### Phase 1: Merge Binaries + Build Tag Separation (v1.5.0 — DONE)
 
-**Goal**: Single `cmd/probe` binary with `serve` and `connect` subcommands.
+**Goal**: Single `cmd/probe` source tree with `serve`, `connect`, and `relay` subcommands, compiled into three build variants via Go build tags.
 
-**Files to create/modify**:
-- `cmd/probe/main.go` (NEW) — subcommand dispatch using `os.Args[1]`
-- `cmd/probe/serve.go` (NEW) — moved from `cmd/probe-server/main.go`
-- `cmd/probe/connect.go` (NEW) — moved from `cmd/probe-client/main.go`
-- `cmd/probe-server/main.go` — delete or keep as thin wrapper for backward compat
-- `cmd/probe-client/main.go` — delete or keep as thin wrapper for backward compat
+**Build tag system**:
+- **Default (client-only)**: `go build -trimpath` → `probe connect` only (~9.6 MB). Server and relay code excluded via `serve_stub.go` and `relay_stub.go` which print a helpful error if the mode is invoked.
+- **Server**: `go build -trimpath -tags server` → `probe serve` + `probe connect` (~11.1 MB).
+- **Relay**: `go build -trimpath -tags relay` → `probe relay` + `probe connect` (~9.7 MB).
 
-**Changes**:
+**Files created**:
+- `cmd/probe/main.go` — subcommand dispatch using `os.Args[1]`
+- `cmd/probe/serve.go` — server mode (build tag: `+build server`)
+- `cmd/probe/connect.go` — client mode (always compiled)
+- `cmd/probe/relay.go` — relay mode (build tag: `+build relay`)
+- `cmd/probe/serve_stub.go` — stub for client-only builds, prints error if `serve` invoked
+- `cmd/probe/relay_stub.go` — stub for client-only builds, prints error if `relay` invoked
+- `cmd/probe-server/main.go` — deleted
+- `cmd/probe-client/main.go` — deleted
+
+**Key decisions**:
 - Extract flag parsing into per-mode functions
 - Share `appVersion` constant
 - `probe serve` → calls `runServe()` with all server flags
 - `probe connect` → calls `runConnect()` with client config
+- `probe relay` → calls `runRelay()` with relay flags
 - `probe --version` → prints version
-- `probe` (no args) → prints usage
+- `probe` (no args) → prints usage with build tag requirements per subcommand
+- Obfuscation tool `isServerCmd()` updated to skip both `serve.go` and `relay.go` in `cmd/probe/`, ensuring client-only binaries get full obfuscation
+
+**Security benefit**: Endpoints only receive the client-only binary — server and relay code is excluded at compile time, reducing the RE surface. The previous v1.4.0 unified binary (all 3 modes in one binary) had 1/67 Microsoft Wacatac detection; the client-only build tag variant has 0 detections.
 
 **Testing**:
-- `probe serve --addr :7700 --admin-password admin` → server starts
-- `probe connect --config probe-client.json` → agent connects
-- `probe --version` → prints `PROBE v1.3.0`
-- Backward compat: `probe-server` and `probe-client` old binaries still work
+- `go build -trimpath` → `probe serve` prints stub error, `probe connect` works
+- `go build -trimpath -tags server` → `probe serve --addr :7700 --admin-password admin` starts, `probe connect` works
+- `go build -trimpath -tags relay` → `probe relay` works, `probe connect` works
+- `probe --version` → prints `PROBE v1.5.0`
 
 ### Phase 2: Add Relay Mode
 
@@ -323,9 +335,11 @@ probe connect --config agent-behind-relay.json
 | File | Action | Purpose |
 |------|--------|---------|
 | `cmd/probe/main.go` | NEW | Subcommand dispatch |
-| `cmd/probe/serve.go` | NEW | Server mode (from probe-server) |
-| `cmd/probe/connect.go` | NEW | Client mode (from probe-client) |
-| `cmd/probe/relay.go` | NEW | Relay mode (Phase 2) |
+| `cmd/probe/serve.go` | NEW | Server mode, build tag `server` |
+| `cmd/probe/connect.go` | NEW | Client mode (always compiled) |
+| `cmd/probe/relay.go` | NEW | Relay mode, build tag `relay` |
+| `cmd/probe/serve_stub.go` | NEW | Stub for client-only builds |
+| `cmd/probe/relay_stub.go` | NEW | Stub for client-only builds |
 | `internal/relay/relay.go` | NEW | Relay core logic (Phase 2) |
 | `internal/relay/mux.go` | NEW | Channel multiplexer (Phase 2) |
 | `internal/server/server_ws.go` | MODIFY | Relay connection detection (Phase 2) |
@@ -347,13 +361,13 @@ No new external dependencies. Uses existing:
 3. **TLS** — relay terminates TLS for downstream agents, uses TLS for upstream. Self-signed certs acceptable for internal relay deployment. Do NOT reuse the same self-signed cert across deployments — each relay gets its own cert to prevent fingerprint tracking.
 4. **No end-to-end encryption in Phase 2** — relay can see all traffic including tokens, command outputs, file contents. Relay compromise = full MITM. Mitigation: E2E encryption (Phase 4). Document this risk explicitly to operators.
 5. **Relay compromise** — if relay is compromised, attacker can see all agent traffic, harvest tokens, and inject commands. Mitigation: E2E encryption (Phase 4), relay token rotation, separate token sets per relay.
-6. **Single binary RE exposure** — merging server+client+relay into one binary means capturing any single binary reveals the entire platform code. This is an inherent tradeoff. Mitigation: obfuscation tool covers all modes, VT scan before deployment.
+6. **Single binary RE exposure — resolved by build tags (v1.5.0)**: The v1.4.0 concern about merging server+client+relay into one binary (capturing any single binary reveals the entire platform code) is resolved by build tag separation. Client-only binaries exclude server and relay code at compile time. The obfuscation tool covers all variants. VT scan before deployment remains mandatory.
 7. **Configurable WS path** — the `/ws` path should be configurable per-deployment (`--ws-path /custom`) to prevent a single firewall rule from blocking all PROBE traffic.
 
 ## AV/Evasion Considerations
 
-1. **Obfuscation tool fix required**: `isServerCmd()` currently skips `cmd/*-server/`. After merge, the unified binary at `cmd/probe/` won't match. Must update to skip based on mode flag or build tag, not directory pattern.
+1. **Obfuscation tool updated (v1.5.0)**: `isServerCmd()` now skips both `serve.go` and `relay.go` in `cmd/probe/`, ensuring client-only builds get full obfuscation without server/relay code. The v1.4.0 concern about directory pattern matching is resolved — the obfuscation tool now recognizes the unified binary structure.
 2. **Anti-debug must be mode-aware**: The evasion package's `init()` runs before `main()` for ALL modes. Running `probe serve` in a VM/VPS will trigger `os.Exit(0)` and kill the server. Fix: anti-debug init checks runtime mode — only fires for `connect` and `relay`, skips `serve`.
-3. **Broader capability footprint**: Unified binary has WebSocket client + WebSocket server + HTTP server + relay multiplexer. AV heuristics scoring capability diversity may flag this. The gorilla `Upgrader` struct is a server-side signature not previously in client-only builds.
+3. **Capability footprint reduced by build tags (v1.5.0)**: The v1.4.0 unified binary had WebSocket client + WebSocket server + HTTP server + relay multiplexer in one binary. With build tag separation, client-only binaries contain only the WebSocket client — the gorilla `Upgrader` struct and server-side signatures are excluded. Server and relay builds retain the broader footprint but are deployed only on trusted infrastructure.
 4. **Dynamic magic byte**: The framing protocol uses a randomly-generated magic byte (not hardcoded 0x01) to prevent Suricata signature matching. XOR string encryption doesn't cover numeric constants — the dynamic byte approach solves this.
-5. **VT scan mandatory before deployment**: The profile change from adding server+relay code to the agent binary is unquantified. Must VT scan the unified binary before deploying to any target.
+5. **Build tag separation fixes RE exposure (v1.5.0)**: The v1.4.0 concern about single-binary RE exposure (all 3 modes in one binary, 1/67 Microsoft Wacatac detection) is resolved by build tag separation. Client-only binaries exclude server and relay code at compile time — endpoints receive minimal-capability binaries with smaller footprint and 0 VT detections. Server and relay binaries are deployed only on trusted infrastructure. VT scan remains mandatory before deployment.

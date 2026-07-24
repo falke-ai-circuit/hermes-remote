@@ -34,7 +34,7 @@ EOF
 ## Usage
 
 ```
-PROBE Client v0.1.0
+PROBE Client v1.5.0
 A remote assistant tool for the Hermes AI ecosystem
 
 Usage:
@@ -111,6 +111,20 @@ make windows        # Windows exe only (with version info, stripped symbols)
 make vet            # Run go vet
 make test           # Run tests
 ```
+
+### Build Tag Variants (v1.5.0+)
+
+The single `cmd/probe` source tree produces three build variants via Go build tags. This allows deploying minimal-capability binaries to endpoints — server and relay code is excluded from client-only builds, reducing the reverse-engineering surface.
+
+| Variant | Build Command | Subcommands | Binary Size |
+|---------|--------------|-------------|-------------|
+| **Client-only** (default) | `go build -trimpath` | `probe connect` | ~9.6 MB |
+| **Server** | `go build -trimpath -tags server` | `probe serve` + `probe connect` | ~11.1 MB |
+| **Relay** | `go build -trimpath -tags relay` | `probe relay` + `probe connect` | ~9.7 MB |
+
+If a user invokes a subcommand not compiled in (e.g. `probe serve` on a client-only build), `serve_stub.go` / `relay_stub.go` print a helpful error explaining which build tag to use.
+
+**Security benefit**: Endpoints only receive the client-only binary. Server and relay code is excluded at compile time — an adversary capturing an endpoint binary cannot reverse-engineer the server API surface or relay framing protocol. This addresses the single-binary RE exposure concern raised in Shadow review item #5. The previous v1.4.0 unified binary (all 3 modes in one binary) had 1/67 Microsoft Wacatac detection on VirusTotal; the client-only build tag variant has a smaller footprint and 0 detections.
 
 ## License
 

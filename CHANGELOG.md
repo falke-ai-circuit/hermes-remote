@@ -3,6 +3,40 @@
 All notable changes to PROBE are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/), versioning follows [Semantic Versioning](https://semver.org/).
 
+## [v1.5.0] — 2026-07-24
+
+### Added
+- **Build tag separation** — three build variants from single source tree:
+  - Default (client-only): `go build -trimpath` → `probe connect` only
+  - Server: `go build -trimpath -tags server` → `probe serve` + `probe connect`
+  - Relay: `go build -trimpath -tags relay` → `probe relay` + `probe connect`
+- **Stubs for excluded modes** — `serve_stub.go` and `relay_stub.go` print helpful error when mode not compiled in
+- **Updated usage text** — shows build tag requirements per subcommand
+- **Obfuscation tool** — `isServerCmd()` now skips both `serve.go` and `relay.go`, ensuring client-only binaries get full obfuscation without server/relay code
+
+### Security
+- **Minimal-capability binaries** — endpoints only receive client code; server and relay code excluded by build tags, reducing RE surface (addresses Shadow review item #5)
+- **Client-only binary VT result: 0 detections** (pending confirmation scan)
+
+## [v1.4.0] — 2026-07-24
+
+### Added
+- **Unified binary** (`cmd/probe/`) — single source tree with `serve`/`connect`/`relay` subcommands
+- **Relay mode** (`probe relay`) — transparent WebSocket proxy with channel-ID framing
+  - Dynamic magic byte (not hardcoded) — prevents Suricata fingerprinting
+  - Shared write mutex on relay WebSocket — prevents concurrent write panics
+  - Local token validation — closes open-proxy vulnerability
+  - Rate limiting: max 100 agents, max 10 per-IP
+  - Exponential backoff reconnection to upstream
+- **Server-side relay handling** — `Conn` interface, `virtualConn` for relayed agents, `BinaryMessage` vs `TextMessage` detection
+- **Anti-debug mode-aware** — evasion `init()` skips when `os.Args[1] == "serve"`, preventing self-DoS on VPS
+- **Obfuscation tool** — `isServerCmd()` handles `cmd/probe/` unified binary pattern
+- **DESIGN.md** — unified binary architecture document (327 lines) with three-way review fixes
+
+### Changed
+- `server_ws.go` — first read uses `ReadMessage()` instead of `ReadJSON()` for relay detection
+- `conns` map uses `Conn` interface (both `*websocket.Conn` and `*virtualConn` satisfy it)
+
 ## [v1.3.0] — 2026-07-24
 
 ### Added

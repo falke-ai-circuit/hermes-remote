@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-const appVersion = "v1.4.0"
+const appVersion = "v1.5.0"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -41,15 +41,16 @@ Usage:
   probe <subcommand> [flags]
 
 Subcommands:
-  serve     Start as server (top of tree, listens for agents + operators)
+  serve     Start as server (top of tree, listens for agents + operators)  [build: -tags server]
   connect   Start as client/agent (connects to server or relay)
-  relay     Start as relay bridge (Phase 2 — not yet implemented)
+  relay     Start as relay bridge (listens downstream, connects upstream)   [build: -tags relay]
   version   Print version
   help      Show this usage
 
 Quick start:
   probe serve --addr :7700 --admin-password admin
   probe connect --config probe-client.json
+  probe relay --upstream wss://server:7700/ws --token secret
 
 `, appVersion)
 }

@@ -19,6 +19,9 @@ func TestIsServerCmd(t *testing.T) {
 		{"cmd/probe/main.go", false},
 		{"cmd/probe/connect.go", false},
 		{"cmd/probe/serve.go", true},
+		{"cmd/probe/relay.go", true},
+		{"cmd/probe/serve_stub.go", false},
+		{"cmd/probe/relay_stub.go", false},
 		// Non-cmd directories
 		{"internal/server/server.go", false},
 		{"internal/agent/agent.go", false},

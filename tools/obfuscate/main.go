@@ -36,10 +36,12 @@ func readModulePath(dir string) string {
 	return ""
 }
 
-// isServerCmd checks if a Go file belongs to a server binary that should be
-// skipped during obfuscation. The unified binary at cmd/probe/ contains both
-// server and client code — we skip the serve.go file specifically (it contains
-// the server entry point) while still obfuscating connect.go and main.go.
+// isServerCmd checks if a Go file belongs to a server or relay binary that
+// should be skipped during obfuscation. The unified binary at cmd/probe/
+// uses build tags: serve.go (//go:build server) and relay.go (//go:build relay)
+// are excluded from default client-only builds. We skip both files so the
+// client-only binary — the one deployed to endpoints — gets full obfuscation.
+// serve_stub.go and relay_stub.go are trivial stubs (no evasion needed).
 // For legacy separate binaries, cmd/*-server/ is still matched.
 func isServerCmd(path string) bool {
 	parts := strings.Split(path, string(filepath.Separator))
@@ -50,9 +52,12 @@ func isServerCmd(path string) bool {
 			if strings.HasSuffix(sub, "-server") || sub == "server" {
 				return true
 			}
-			// Unified binary: cmd/probe/ — skip serve.go only
-			if sub == "probe" && i+2 < len(parts) && parts[i+2] == "serve.go" {
-				return true
+			// Unified binary: cmd/probe/ — skip serve.go and relay.go
+			if sub == "probe" && i+2 < len(parts) {
+				fname := parts[i+2]
+				if fname == "serve.go" || fname == "relay.go" {
+					return true
+				}
 			}
 		}
 	}

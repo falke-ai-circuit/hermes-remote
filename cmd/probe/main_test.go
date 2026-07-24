@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// buildProbe builds the unified probe binary and returns its path.
+// buildProbe builds the default (client-only) probe binary and returns its path.
 func buildProbe(t *testing.T) string {
 	t.Helper()
 	binPath := t.TempDir() + "/probe"
@@ -100,16 +100,6 @@ func TestCLI_UnknownSubcommand(t *testing.T) {
 	}
 }
 
-func TestCLI_ServeVersion(t *testing.T) {
-	bin := buildProbe(t)
-	stdout, _, code := runProbe(t, bin, "serve", "--version")
-	if code != 0 {
-		t.Fatalf("expected exit 0, got %d", code)
-	}
-	if !strings.Contains(stdout, "PROBE Server") {
-		t.Errorf("expected 'PROBE Server' in output, got: %s", stdout)
-	}
-}
 
 func TestCLI_ConnectVersion(t *testing.T) {
 	bin := buildProbe(t)
@@ -119,41 +109,6 @@ func TestCLI_ConnectVersion(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "PROBE Client") {
 		t.Errorf("expected 'PROBE Client' in output, got: %s", stdout)
-	}
-}
-
-func TestCLI_RelayRequiresUpstream(t *testing.T) {
-	bin := buildProbe(t)
-	_, stderr, code := runProbe(t, bin, "relay")
-	if code == 0 {
-		t.Errorf("expected non-zero exit for relay without --upstream, got 0")
-	}
-	if !strings.Contains(stderr, "--upstream is required") {
-		t.Errorf("expected '--upstream is required' in stderr, got: %s", stderr)
-	}
-}
-
-func TestCLI_RelayVersion(t *testing.T) {
-	bin := buildProbe(t)
-	stdout, _, code := runProbe(t, bin, "relay", "--version")
-	if code != 0 {
-		t.Fatalf("expected exit 0, got %d", code)
-	}
-	if !strings.Contains(stdout, "PROBE Relay") {
-		t.Errorf("expected 'PROBE Relay' in output, got: %s", stdout)
-	}
-}
-
-func TestCLI_SharedVersion(t *testing.T) {
-	// Verify serve and connect both report the same version
-	bin := buildProbe(t)
-	serveOut, _, _ := runProbe(t, bin, "serve", "--version")
-	connectOut, _, _ := runProbe(t, bin, "connect", "--version")
-	if !strings.Contains(serveOut, appVersion) {
-		t.Errorf("serve version mismatch: %s", serveOut)
-	}
-	if !strings.Contains(connectOut, appVersion) {
-		t.Errorf("connect version mismatch: %s", connectOut)
 	}
 }
 
